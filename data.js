@@ -326,4 +326,82 @@ const SEASON_MONTHS = {
   NHL: [10, 11, 12, 1, 2, 3, 4, 5, 6],
 };
 
+// ---------- per-player current stats and recent sales ----------
+// Stats vary by sport; we only define the columns that make sense per sport.
+const CURRENT_STATS = {
+  ohtani:   { season: "2026", line: { GP: 28, AB: 102, HR: 11, RBI: 27, AVG: 0.318, OBP: 0.412, SLG: 0.701, OPS: 1.113 } },
+  judge:    { season: "2026", line: { GP: 27, AB:  98, HR:  6, RBI: 18, AVG: 0.241, OBP: 0.359, SLG: 0.461, OPS: 0.820 } },
+  trout:    { season: "2026", line: { GP: 24, AB:  88, HR:  5, RBI: 14, AVG: 0.262, OBP: 0.371, SLG: 0.502, OPS: 0.873 } },
+  soto:     { season: "2026", line: { GP: 27, AB:  96, HR: 10, RBI: 24, AVG: 0.310, OBP: 0.428, SLG: 0.676, OPS: 1.104 } },
+  wemby:    { season: "2025-26", line: { GP: 78, PPG: 25.4, RPG: 11.2, APG: 4.1, BPG: 3.8, FG_PCT: 0.512, "3P_PCT": 0.358 } },
+  jokic:    { season: "2025-26", line: { GP: 76, PPG: 29.8, RPG: 12.4, APG: 9.6, "FG_PCT": 0.582, "3P_PCT": 0.371 } },
+  lebron:   { season: "2025-26", line: { GP: 71, PPG: 22.4, RPG:  7.3, APG: 8.1, "FG_PCT": 0.498, "3P_PCT": 0.341 } },
+  curry:    { season: "2025-26", line: { GP: 74, PPG: 27.0, RPG:  4.6, APG: 6.0, "FG_PCT": 0.469, "3P_PCT": 0.428 } },
+  mahomes:  { season: "2025", line: { GP: 17, "PASS_YDS": 4602, "PASS_TD": 36, INT: 11, "PASSER_RTG": 101.4, "QBR": 71.2 } },
+  allen:    { season: "2025", line: { GP: 17, "PASS_YDS": 4128, "PASS_TD": 30, INT: 14, "PASSER_RTG": 94.8,  "QBR": 67.5, "RUSH_TD": 11 } },
+  mcdavid:  { season: "2025-26", line: { GP: 80, G: 49, A: 92, P: 141, "+/-":  24, PIM: 28 } },
+  // Retired / legacy career lines:
+  mj:       { season: "Career", line: { GP: 1072, PPG: 30.1, RPG: 6.2, APG: 5.3, "FG_PCT": 0.497, RINGS: 6, MVPs: 5 } },
+  kobe:     { season: "Career", line: { GP: 1346, PPG: 25.0, RPG: 5.2, APG: 4.7, "FG_PCT": 0.447, RINGS: 5, MVPs: 1 } },
+  ruth:     { season: "Career", line: { GP: 2503, AB: 8398, HR: 714, RBI: 2214, AVG: 0.342, OBP: 0.474, SLG: 0.690, OPS: 1.164 } },
+  gretzky:  { season: "Career", line: { GP: 1487, G: 894, A: 1963, P: 2857, RINGS: 4, MVPs: 9 } },
+  brady:    { season: "Career", line: { GP: 335, "PASS_YDS": 89214, "PASS_TD": 649, INT: 212, "PASSER_RTG": 97.2, RINGS: 7, MVPs: 3 } },
+};
+
+// Synthetic recent-sales feed per player. Real apps would pull from eBay,
+// Goldin, PWCC etc. — here we generate plausible comps from the card list.
+function buildSales(player) {
+  const sales = [];
+  const platforms = ["eBay", "Goldin", "PWCC", "MySlabs", "Heritage"];
+  for (let i = 0; i < 6; i++) {
+    const card = player.cards[i % player.cards.length];
+    const drift = 1 + (Math.random() - 0.5) * 0.12;
+    const price = Math.max(1, Math.round(card.value * drift));
+    sales.push({
+      date: daysAgo(Math.floor(i * 4 + Math.random() * 3) + 1),
+      card: `${card.year} ${card.name}`,
+      grade: card.grade,
+      price,
+      platform: platforms[Math.floor(Math.random() * platforms.length)],
+    });
+  }
+  // Newest first.
+  sales.sort((a, b) => (a.date < b.date ? 1 : -1));
+  return sales;
+}
+
+// Build comps: for each card a player owns, a few similar past sales at
+// nearby grades.
+function buildComps(player) {
+  const comps = {};
+  const otherGrades = ["PSA 10", "PSA 9", "BGS 9.5", "BGS 9", "SGC 10"];
+  player.cards.forEach(card => {
+    const list = [];
+    for (let i = 0; i < 4; i++) {
+      const g = otherGrades[(i + (card.grade.length % 5)) % otherGrades.length];
+      const factor = g === card.grade
+        ? 0.95 + Math.random() * 0.1
+        : g.includes("10") ? 1.0
+        : g.includes("9.5") ? 0.6
+        : g.includes("9") ? 0.35
+        : 0.25;
+      list.push({
+        date: daysAgo(7 + i * 9 + Math.floor(Math.random() * 5)),
+        grade: g,
+        price: Math.max(1, Math.round(card.value * factor * (0.95 + Math.random() * 0.1))),
+        platform: ["eBay", "Goldin", "PWCC", "MySlabs"][i % 4],
+      });
+    }
+    list.sort((a, b) => (a.date < b.date ? 1 : -1));
+    comps[card.name] = list;
+  });
+  return comps;
+}
+
+PLAYERS.forEach(p => {
+  p.currentStats = CURRENT_STATS[p.id] || null;
+  p.recentSales = buildSales(p);
+  p.comps = buildComps(p);
+});
+
 window.CARDPULSE_DATA = { PLAYERS, SEASON_MONTHS, TODAY };

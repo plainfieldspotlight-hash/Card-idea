@@ -16,7 +16,9 @@
       <button class="tab active" data-tab="movers">Movers</button>
       <button class="tab" data-tab="all">All Players</button>
       <button class="tab" data-tab="retired">Retired</button>
+      <button class="tab" data-tab="picks">Top Picks</button>
       <button class="tab" data-tab="watchlist">Watchlist</button>
+      <button class="tab" data-tab="collection">My Collection</button>
     </nav>
     <div class="search">
       <input id="search" type="search" placeholder="Search player or card…" />
@@ -47,10 +49,24 @@
       <div class="filter-group">
         <label>Sort</label>
         <select id="sort-filter">
+          <option value="rec-desc">Strongest Buy</option>
+          <option value="rec-asc">Strongest Sell</option>
           <option value="value-change-desc">Biggest Gainers</option>
           <option value="value-change-asc">Biggest Losers</option>
           <option value="divergence">Value vs Performance Divergence</option>
           <option value="value-desc">Highest Value</option>
+          <option value="sport-group">Group by Sport</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Recommendation</label>
+        <select id="rec-filter">
+          <option value="all">All</option>
+          <option value="2">Strong Buy</option>
+          <option value="1">Buy</option>
+          <option value="0">Hold</option>
+          <option value="-1">Sell</option>
+          <option value="-2">Strong Sell</option>
         </select>
       </div>
       <div class="legend">
@@ -61,6 +77,7 @@
     </section>
 
     <section id="player-grid" class="grid"></section>
+    <section id="collection-view" class="hidden"></section>
   </main>
 
   <div id="detail-modal" class="modal hidden" aria-hidden="true">
