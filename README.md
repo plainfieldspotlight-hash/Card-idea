@@ -32,6 +32,26 @@ python3 -m http.server 8000
 
 Then visit `http://localhost:8000`.
 
+## Deploy to GitHub Pages (live URL on your phone)
+
+A workflow at `.github/workflows/pages.yml` deploys the site to GitHub Pages
+on every push to `main` or the active feature branch.
+
+One-time setup:
+
+1. Repo → **Settings → Pages**.
+2. Under **Source**, select **GitHub Actions**.
+
+After the next push the workflow runs and the URL appears at
+`https://<your-user>.github.io/<repo>/`. For this repo that's:
+`https://plainfieldspotlight-hash.github.io/Card-idea/`
+
+## Install as a PWA on Android
+
+Open the deployed URL in Chrome → menu (⋮) → **Add to Home screen**. The app
+installs with an icon, runs full-screen, and works offline thanks to the
+service worker (`sw.js`).
+
 ## Files
 
 - `index.html` — markup and tab/filter shell.
