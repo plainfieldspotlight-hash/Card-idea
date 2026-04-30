@@ -1,0 +1,82 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1" />
+  <title>CardPulse — Player & Card Value Tracker</title>
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">◆</span>
+      <span class="brand-name">CardPulse</span>
+    </div>
+    <nav class="tabs">
+      <button class="tab active" data-tab="movers">Movers</button>
+      <button class="tab" data-tab="all">All Players</button>
+      <button class="tab" data-tab="retired">Retired</button>
+      <button class="tab" data-tab="watchlist">Watchlist</button>
+    </nav>
+    <div class="search">
+      <input id="search" type="search" placeholder="Search player or card…" />
+    </div>
+  </header>
+
+  <main>
+    <section class="filters">
+      <div class="filter-group">
+        <label>Sport</label>
+        <select id="sport-filter">
+          <option value="all">All Sports</option>
+          <option value="MLB">MLB</option>
+          <option value="NBA">NBA</option>
+          <option value="NFL">NFL</option>
+          <option value="NHL">NHL</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Window</label>
+        <select id="window-filter">
+          <option value="7">7d</option>
+          <option value="30" selected>30d</option>
+          <option value="90">90d</option>
+          <option value="365">1y</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Sort</label>
+        <select id="sort-filter">
+          <option value="value-change-desc">Biggest Gainers</option>
+          <option value="value-change-asc">Biggest Losers</option>
+          <option value="divergence">Value vs Performance Divergence</option>
+          <option value="value-desc">Highest Value</option>
+        </select>
+      </div>
+      <div class="legend">
+        <span class="dot up"></span> Value up
+        <span class="dot down"></span> Value down
+        <span class="dot flat"></span> Flat / No change
+      </div>
+    </section>
+
+    <section id="player-grid" class="grid"></section>
+  </main>
+
+  <div id="detail-modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <button class="modal-close" data-close aria-label="Close">×</button>
+      <div id="detail-body"></div>
+    </div>
+  </div>
+
+  <footer class="foot">
+    <span>Demo data — not actual market prices.</span>
+    <span id="today-stamp"></span>
+  </footer>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+</body>
+</html>
