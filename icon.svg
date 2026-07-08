@@ -1,0 +1,22 @@
+<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 512 512">
+  <defs>
+    <linearGradient id="bg" x1="0" y1="0" x2="1" y2="1">
+      <stop offset="0%" stop-color="#0b0e14"/>
+      <stop offset="100%" stop-color="#1a2030"/>
+    </linearGradient>
+    <linearGradient id="line" x1="0" y1="1" x2="1" y2="0">
+      <stop offset="0%" stop-color="#5b8cff"/>
+      <stop offset="100%" stop-color="#2ecc71"/>
+    </linearGradient>
+  </defs>
+  <rect width="512" height="512" rx="96" fill="url(#bg)"/>
+  <!-- Stylized chart-line -->
+  <polyline
+    points="80,360 160,300 220,330 290,220 360,260 432,140"
+    fill="none" stroke="url(#line)" stroke-width="22"
+    stroke-linecap="round" stroke-linejoin="round"/>
+  <!-- Diamond accent -->
+  <path d="M256 78 L296 138 L256 198 L216 138 Z" fill="#5b8cff"/>
+  <!-- Pulse dot -->
+  <circle cx="432" cy="140" r="18" fill="#2ecc71"/>
+</svg>

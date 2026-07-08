@@ -1,0 +1,120 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="utf-8" />
+  <meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover" />
+  <title>CardPulse — Player & Card Value Tracker</title>
+  <meta name="theme-color" content="#0b0e14" />
+  <meta name="apple-mobile-web-app-capable" content="yes" />
+  <meta name="apple-mobile-web-app-status-bar-style" content="black-translucent" />
+  <meta name="apple-mobile-web-app-title" content="CardPulse" />
+  <link rel="manifest" href="manifest.webmanifest" />
+  <link rel="icon" type="image/svg+xml" href="icon.svg" />
+  <link rel="apple-touch-icon" href="icon-192.png" />
+  <link rel="stylesheet" href="styles.css" />
+</head>
+<body>
+  <header class="topbar">
+    <div class="brand">
+      <span class="logo">◆</span>
+      <span class="brand-name">CardPulse</span>
+    </div>
+    <nav class="tabs">
+      <button class="tab active" data-tab="movers">Movers</button>
+      <button class="tab" data-tab="all">All Players</button>
+      <button class="tab" data-tab="retired">Retired</button>
+      <button class="tab" data-tab="picks">Top Picks</button>
+      <button class="tab" data-tab="leaders">Leaders</button>
+      <button class="tab" data-tab="watchlist">Watchlist</button>
+      <button class="tab" data-tab="collection">My Collection</button>
+    </nav>
+    <div class="live-control">
+      <button id="live-toggle" class="live-badge live-on" title="Toggle live updates">
+        <span class="live-dot"></span><span id="live-label">LIVE</span>
+      </button>
+      <span id="live-stamp" class="live-stamp"></span>
+    </div>
+    <div class="search">
+      <input id="search" type="search" placeholder="Search player or card…" />
+    </div>
+  </header>
+
+  <main>
+    <section class="filters">
+      <div class="filter-group">
+        <label>Sport</label>
+        <select id="sport-filter">
+          <option value="all">All Sports</option>
+          <option value="MLB">MLB</option>
+          <option value="NBA">NBA</option>
+          <option value="NFL">NFL</option>
+          <option value="NHL">NHL</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Window</label>
+        <select id="window-filter">
+          <option value="7">7d</option>
+          <option value="30" selected>30d</option>
+          <option value="90">90d</option>
+          <option value="365">1y</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Sort</label>
+        <select id="sort-filter">
+          <option value="rec-desc">Strongest Buy</option>
+          <option value="rec-asc">Strongest Sell</option>
+          <option value="value-change-desc">Biggest Gainers</option>
+          <option value="value-change-asc">Biggest Losers</option>
+          <option value="divergence">Value vs Performance Divergence</option>
+          <option value="value-desc">Highest Value</option>
+          <option value="sport-group">Group by Sport</option>
+        </select>
+      </div>
+      <div class="filter-group">
+        <label>Recommendation</label>
+        <select id="rec-filter">
+          <option value="all">All</option>
+          <option value="2">Strong Buy</option>
+          <option value="1">Buy</option>
+          <option value="0">Hold</option>
+          <option value="-1">Sell</option>
+          <option value="-2">Strong Sell</option>
+        </select>
+      </div>
+      <div class="legend">
+        <span class="dot up"></span> Value up
+        <span class="dot down"></span> Value down
+        <span class="dot flat"></span> Flat / No change
+      </div>
+    </section>
+
+    <section id="player-grid" class="grid"></section>
+    <section id="collection-view" class="hidden"></section>
+  </main>
+
+  <div id="detail-modal" class="modal hidden" aria-hidden="true">
+    <div class="modal-backdrop" data-close></div>
+    <div class="modal-card" role="dialog" aria-modal="true">
+      <button class="modal-close" data-close aria-label="Close">×</button>
+      <div id="detail-body"></div>
+    </div>
+  </div>
+
+  <footer class="foot">
+    <span>Demo data — not actual market prices.</span>
+    <span id="today-stamp"></span>
+  </footer>
+
+  <script src="data.js"></script>
+  <script src="app.js"></script>
+  <script>
+    if ("serviceWorker" in navigator) {
+      window.addEventListener("load", () => {
+        navigator.serviceWorker.register("sw.js").catch(() => {});
+      });
+    }
+  </script>
+</body>
+</html>
