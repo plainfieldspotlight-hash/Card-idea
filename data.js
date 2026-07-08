@@ -9,10 +9,12 @@
  *   - prices: array of { date, value } – ordered oldest → newest.
  *   - cards:  array of representative cards { name, year, grade, value }.
  *
- * Dates are ISO strings. Today is treated as 2026-04-30 by app.js.
+ * Dates are ISO strings. TODAY is the real current date, so the season
+ * logic, price windows, and stats always reflect "now" — the app
+ * self-updates on every load, and app.js live-ticks prices after that.
  */
 
-const TODAY = new Date("2026-04-30");
+const TODAY = new Date();
 
 // ---------- helpers used only inside this file ----------
 function daysAgo(n) {

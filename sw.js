@@ -1,6 +1,6 @@
 // Simple cache-first service worker for the CardPulse app shell.
 // Bump CACHE_NAME on every release so users pick up new code.
-const CACHE_NAME = "cardpulse-v3";
+const CACHE_NAME = "cardpulse-v4";
 const APP_SHELL = [
   "./",
   "./index.html",

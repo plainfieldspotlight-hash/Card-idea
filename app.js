@@ -10,6 +10,8 @@
     query: "",
     watchlist: new Set(JSON.parse(localStorage.getItem("cp_watch") || "[]")),
     collection: JSON.parse(localStorage.getItem("cp_collection") || "[]"),
+    live: true,
+    modalOpen: false,
   };
 
   function saveCollection() {
@@ -310,6 +312,12 @@
       renderTopPicks();
       return;
     }
+    if (state.tab === "leaders") {
+      grid.classList.remove("hidden");
+      collectionView.classList.add("hidden");
+      renderLeaders();
+      return;
+    }
     grid.classList.remove("hidden");
     collectionView.classList.add("hidden");
     grid.style.gridTemplateColumns = ""; // restore the default from CSS
@@ -398,6 +406,135 @@
     $$(".pick-row").forEach(el => {
       el.addEventListener("click", () => openDetail(el.dataset.id));
     });
+  }
+
+  // ---------- leaders ----------
+  // Per-sport leaderboards: hottest performers, biggest value movers,
+  // and most valuable cards.
+  function renderLeaders() {
+    const grid = $("#player-grid");
+    grid.style.gridTemplateColumns = "1fr";
+
+    const all = PLAYERS
+      .filter(p => state.sport === "all" || p.sport === state.sport)
+      .map(p => {
+        const w = sliceWindow(p.prices, state.windowDays);
+        const perf = performanceVerdict(p);
+        const topCard = p.cards.slice().sort((a, b) => b.value - a.value)[0];
+        return { player: p, window: w, perf, topCard };
+      });
+
+    const medal = i => (i === 0 ? "🥇" : i === 1 ? "🥈" : i === 2 ? "🥉" : `${i + 1}.`);
+
+    const leaderRow = (e, right, i) => `
+      <div class="leader-row" data-id="${e.player.id}">
+        <span class="rank">${medal(i)}</span>
+        <div>
+          <div class="pick-name">${e.player.name}</div>
+          <div class="pick-meta">${e.player.sport} · ${e.player.team}${e.player.status === "retired" ? " · RETIRED" : ""}</div>
+        </div>
+        ${right}
+      </div>`;
+
+    const sports = state.sport === "all" ? ["MLB", "NBA", "NFL", "NHL"] : [state.sport];
+    const sections = sports.map(s => {
+      const inSport = all.filter(e => e.player.sport === s);
+      if (!inSport.length) return "";
+
+      // Performance leaders: active, in-season players ranked by perf delta.
+      const perfLeaders = inSport
+        .filter(e => e.perf.verdict !== "legacy" && e.perf.verdict !== "offseason")
+        .sort((a, b) => (b.perf.pct || 0) - (a.perf.pct || 0))
+        .slice(0, 5);
+
+      const perfCol = perfLeaders.length
+        ? perfLeaders.map((e, i) => leaderRow(e,
+            `<span class="${e.perf.verdict === "better" ? "up" : e.perf.verdict === "worse" ? "down" : "flat"}" style="font-size:12px;font-weight:600">${pctStr(e.perf.pct || 0)} ${e.player.statKey}</span>`, i)).join("")
+        : `<div style="color:var(--muted);font-size:12px;padding:8px 2px">Off-season — no live performance. Check back when the season starts.</div>`;
+
+      // Value movers: everyone, ranked by window % change.
+      const movers = inSport.slice().sort((a, b) => b.window.pct - a.window.pct).slice(0, 5);
+      const moverCol = movers.map((e, i) => leaderRow(e,
+        `<span class="${dirClass(e.window.pct)}" style="font-size:12px;font-weight:600">${dirArrow(e.window.pct)} ${pctStr(e.window.pct)}</span>`, i)).join("");
+
+      // Most valuable: ranked by marquee card value.
+      const valuable = inSport.slice().sort((a, b) => b.topCard.value - a.topCard.value).slice(0, 5);
+      const valueCol = valuable.map((e, i) => leaderRow(e,
+        `<span style="font-size:12px;font-weight:700">${formatMoney(e.topCard.value)}</span>`, i)).join("");
+
+      return `<div class="picks-section">
+        <h3>${s} Leaders <span class="player-meta">· ${inSport.length} players</span></h3>
+        <div class="leaders-grid">
+          <div>
+            <div class="picks-col-head">🔥 Performance Leaders</div>
+            ${perfCol}
+          </div>
+          <div>
+            <div class="picks-col-head">📈 Value Movers (${state.windowDays}d)</div>
+            ${moverCol}
+          </div>
+          <div>
+            <div class="picks-col-head">💎 Most Valuable Cards</div>
+            ${valueCol}
+          </div>
+        </div>
+      </div>`;
+    }).join("");
+
+    grid.innerHTML = sections || `<div class="empty-state">No leaders for this filter.</div>`;
+    $$(".leader-row").forEach(el => {
+      el.addEventListener("click", () => openDetail(el.dataset.id));
+    });
+  }
+
+  // ---------- live updates ----------
+  // Simulated live market: every tick, prices random-walk slightly and new
+  // sales occasionally come in. Recommendations and views recompute.
+  let liveTimer = null;
+
+  function liveTick() {
+    const platforms = ["eBay", "Goldin", "PWCC", "MySlabs", "Heritage"];
+    const todayStr = new Date().toISOString().slice(0, 10);
+    PLAYERS.forEach(p => {
+      const last = p.prices[p.prices.length - 1];
+      const drift = 1 + (Math.random() - 0.5) * 0.012; // ±0.6% per tick
+      last.value = Math.max(1, Math.round(last.value * drift * 100) / 100);
+      // Nudge representative card values with the same drift.
+      p.cards.forEach(c => { c.value = Math.max(1, Math.round(c.value * drift)); });
+      // ~1 in 7 chance a new sale prints for this player.
+      if (Math.random() < 0.14) {
+        const card = p.cards[Math.floor(Math.random() * p.cards.length)];
+        p.recentSales.unshift({
+          date: todayStr,
+          card: `${card.year} ${card.name}`,
+          grade: card.grade,
+          price: Math.max(1, Math.round(card.value * (0.95 + Math.random() * 0.1))),
+          platform: platforms[Math.floor(Math.random() * platforms.length)],
+        });
+        p.recentSales = p.recentSales.slice(0, 8);
+      }
+    });
+    updateLiveStamp();
+    // Don't clobber the collection form or an open modal mid-use.
+    if (state.tab !== "collection" && !state.modalOpen) renderGrid();
+  }
+
+  function updateLiveStamp() {
+    const el = $("#live-stamp");
+    if (el) el.textContent = state.live
+      ? `Updated ${new Date().toLocaleTimeString()}`
+      : "Paused";
+  }
+
+  function setLive(on) {
+    state.live = on;
+    const btn = $("#live-toggle");
+    btn.classList.toggle("live-on", on);
+    btn.classList.toggle("live-off", !on);
+    $("#live-label").textContent = on ? "LIVE" : "PAUSED";
+    if (liveTimer) clearInterval(liveTimer);
+    liveTimer = on ? setInterval(liveTick, 15000) : null;
+    updateLiveStamp();
   }
 
   // ---------- collection ----------
@@ -822,10 +959,12 @@
     });
 
     $("#detail-modal").classList.remove("hidden");
+    state.modalOpen = true;
   }
 
   function closeDetail() {
     $("#detail-modal").classList.add("hidden");
+    state.modalOpen = false;
   }
 
   // ---------- wiring ----------
@@ -862,10 +1001,12 @@
     document.addEventListener("keydown", e => {
       if (e.key === "Escape") closeDetail();
     });
+    $("#live-toggle").addEventListener("click", () => setLive(!state.live));
   }
 
   // ---------- init ----------
   $("#today-stamp").textContent = `As of ${TODAY.toISOString().slice(0, 10)}`;
   bindEvents();
   renderGrid();
+  setLive(true);
 })();
