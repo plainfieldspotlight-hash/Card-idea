@@ -1,0 +1,103 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width, initial-scale=1">
+<title>pokeprice — card price radar</title>
+<link rel="stylesheet" href="/static/style.css">
+<link rel="icon" href="data:image/svg+xml,<svg xmlns='http://www.w3.org/2000/svg' viewBox='0 0 100 100'><text y='.9em' font-size='90'>📈</text></svg>">
+</head>
+<body>
+<header class="topbar">
+  <div class="brand">
+    <span class="brand-mark" aria-hidden="true"></span>
+    <h1>pokeprice</h1>
+    <span class="tagline">Pokemon card price radar</span>
+  </div>
+  <div class="model-badge" id="model-badge">loading…</div>
+</header>
+
+<main>
+  <section class="tiles" id="tiles" aria-label="Overview"></section>
+
+  <section class="movers-wrap" aria-label="Predicted movers">
+    <div class="card panel">
+      <h2>Predicted gainers <span class="sub" id="movers-horizon"></span></h2>
+      <ol class="movers" id="gainers"></ol>
+    </div>
+    <div class="card panel">
+      <h2>Predicted losers <span class="sub" id="movers-horizon2"></span></h2>
+      <ol class="movers" id="losers"></ol>
+    </div>
+  </section>
+
+  <section class="card panel table-panel" aria-label="All cards">
+    <div class="filters" role="search">
+      <input id="search" type="search" placeholder="Search card or set…" autocomplete="off">
+      <select id="source-filter" aria-label="Price source">
+        <option value="">All sources</option>
+        <option value="tcgplayer">TCGplayer (USD)</option>
+        <option value="cardmarket">Cardmarket (EUR)</option>
+      </select>
+      <select id="min-price" aria-label="Minimum price">
+        <option value="0">Any price</option>
+        <option value="1" selected>≥ 1.00</option>
+        <option value="5">≥ 5.00</option>
+        <option value="20">≥ 20.00</option>
+        <option value="100">≥ 100.00</option>
+      </select>
+      <select id="sort" aria-label="Sort by">
+        <option value="predicted">Sort: predicted move</option>
+        <option value="prob">Sort: P(up)</option>
+        <option value="change7">Sort: 7d change</option>
+        <option value="price">Sort: price</option>
+        <option value="name">Sort: name</option>
+      </select>
+    </div>
+    <div class="table-scroll">
+      <table id="cards-table">
+        <thead>
+          <tr>
+            <th>Card</th>
+            <th>Listing</th>
+            <th class="num">Price</th>
+            <th class="num">7d change</th>
+            <th class="spark-col">30d trend</th>
+            <th class="num">Predicted</th>
+            <th class="num">P(up)</th>
+          </tr>
+        </thead>
+        <tbody id="cards-body"></tbody>
+      </table>
+    </div>
+    <div class="table-foot">
+      <span id="table-count" class="sub"></span>
+      <div class="pager">
+        <button id="prev" type="button">‹ Prev</button>
+        <button id="next" type="button">Next ›</button>
+      </div>
+    </div>
+  </section>
+
+  <section class="card panel hidden" id="detail-panel" aria-label="Card detail">
+    <button class="close" id="detail-close" type="button" aria-label="Close detail">✕</button>
+    <div class="detail-head" id="detail-head"></div>
+    <div class="chart-wrap">
+      <div class="legend" id="detail-legend"></div>
+      <div id="detail-chart" class="chart" tabindex="0"
+           aria-label="Price history chart. Use left and right arrow keys to move the reading line."></div>
+      <p class="sub axis-note" id="detail-axis-note"></p>
+    </div>
+    <div id="detail-predictions" class="detail-preds"></div>
+  </section>
+
+  <footer class="foot sub">
+    Predictions are statistical estimates for research/fun — not financial advice.
+    Prices: TCGplayer (USD) &amp; Cardmarket (EUR) via the Pokemon TCG API and your own imports.
+  </footer>
+</main>
+
+<div class="tooltip hidden" id="tooltip" role="status"></div>
+<script src="/static/app.js"></script>
+</body>
+</html>

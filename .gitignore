@@ -1,0 +1,20 @@
+# data & models (drop pokemon.zip etc. into data/, everything there stays local)
+data/*
+!data/.gitkeep
+*.db
+*.joblib
+
+# python
+__pycache__/
+*.pyc
+*.egg-info/
+build/
+dist/
+.venv/
+venv/
+.pytest_cache/
+
+# editors
+.idea/
+.vscode/
+.DS_Store
