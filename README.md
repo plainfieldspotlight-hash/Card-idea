@@ -103,6 +103,14 @@ data — backfill more sets and more days, run auto-fetch daily, and check
   reports strategy-after-fees vs the raw signal vs just-holding — on the demo
   market the signal is real (+56% gross) and weekly flipping still loses to
   ~13% fees, which is exactly the honest lesson.
+- **Stale-listing filter** — training drops observations of listings whose
+  price moved in fewer than 20% of their snapshots so far (leakage-safe:
+  judged only on each row's own past; young listings aren't pre-judged).
+  Dead vintage listings are noise that drags down wide-universe accuracy —
+  tune with `pokeprice train --min-activity 0.3` (0 disables) or
+  `POKEPRICE_MIN_ACTIVITY`. The same signal feeds the model as an `activity`
+  feature. Measured neutral on modern-only sets (little staleness to remove);
+  built for 100+-set databases where vintage dominates.
 - **Cross-card & relative features** — set, character, and whole-market
   momentum (leave-one-out, so a card never sees itself), cross-sectional
   momentum ranks, volatility-adjusted momentum, position in the recent

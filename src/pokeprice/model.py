@@ -99,14 +99,26 @@ def _hgb(kind: str, params: dict | None = None, seed: int = 7, **kw):
     )
 
 
-def build_training_frame(conn: sqlite3.Connection, horizon_days: int) -> pd.DataFrame:
+def build_training_frame(conn: sqlite3.Connection, horizon_days: int,
+                         min_activity: float | None = None) -> pd.DataFrame:
     df = features.load_frame(conn)
     if df.empty:
         return df
     df = features.add_features(df, events=features.load_events(conn))
     df = features.add_labels(df, horizon_days)
     df = df[df["price"] >= config.MIN_PRICE]
-    return df.dropna(subset=["label"])
+    df = df.dropna(subset=["label"])
+
+    # Stale-listing filter: once a listing has enough history to judge (>= 5
+    # transitions), drop its observations when the price has moved in fewer
+    # than min_activity of them — dead listings teach the model nothing.
+    min_act = config.MIN_ACTIVITY if min_activity is None else min_activity
+    if min_act > 0 and not df.empty:
+        keep = (df["n_hist"] < 5) | (df["activity"].fillna(1.0) >= min_act)
+        dropped = int((~keep).sum())
+        df = df[keep].copy()
+        df.attrs["stale_rows_dropped"] = dropped
+    return df
 
 
 def fit_bundle(df_train: pd.DataFrame, horizon_days: int,
@@ -208,9 +220,11 @@ def train(
     horizon_days: int = config.DEFAULT_HORIZON_DAYS,
     model_file: Path | None = None,
     tune: bool = False,
+    min_activity: float | None = None,
     log=print,
 ) -> dict:
-    df = build_training_frame(conn, horizon_days)
+    df = build_training_frame(conn, horizon_days, min_activity=min_activity)
+    stale_dropped = df.attrs.get("stale_rows_dropped", 0) if hasattr(df, "attrs") else 0
     if len(df) < MIN_TRAIN_ROWS:
         raise InsufficientHistory(
             f"Only {len(df)} labeled observations (need >= {MIN_TRAIN_ROWS}). "
@@ -255,6 +269,8 @@ def train(
         "features": bundle.feature_names,
         "params": params or dict(DEFAULT_PARAMS),
         "tune_results": tune_results,
+        "min_activity": config.MIN_ACTIVITY if min_activity is None else min_activity,
+        "stale_rows_dropped": stale_dropped,
     }
     bundle.metrics = metrics
     joblib.dump(bundle, model_file or config.model_path())
