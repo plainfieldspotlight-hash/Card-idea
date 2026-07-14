@@ -106,6 +106,27 @@ main { max-width: 1100px; margin: 0 auto; padding: 0 20px 48px; }
 .movers .m-val { font-weight: 600; font-variant-numeric: tabular-nums; }
 .movers .m-price { color: var(--text-secondary); font-variant-numeric: tabular-nums; width: 72px; text-align: right; }
 
+/* ---- high-confidence buys ---- */
+.buys-grid {
+  display: grid; grid-template-columns: repeat(4, 1fr); gap: 12px;
+}
+@media (max-width: 980px) { .buys-grid { grid-template-columns: repeat(2, 1fr); } }
+@media (max-width: 560px) { .buys-grid { grid-template-columns: 1fr; } }
+.buy-tier {
+  border: 1px solid var(--grid); border-radius: 8px; padding: 10px 12px;
+  min-width: 0;
+}
+.buy-tier h3 {
+  margin: 0 0 6px; font-size: 12px; font-weight: 600;
+  color: var(--text-secondary);
+  padding-bottom: 6px; border-bottom: 1px solid var(--grid);
+}
+.buy-tier .movers li { padding: 6px 0; }
+.buy-tier .m-name .sub { font-size: 11px; }
+.buy-tier .empty-note { padding: 10px 2px; font-size: 12px; }
+.m-stack { display: flex; flex-direction: column; align-items: flex-end; }
+.m-stack .sub { font-size: 11px; }
+
 .thumb {
   width: 30px; height: 42px; border-radius: 3px; object-fit: cover;
   background: var(--grid); flex: none;

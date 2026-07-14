@@ -22,6 +22,14 @@ SORTS = {
     "date": "l.snapshot_date",
 }
 
+# High-confidence buy tiers: (key, label, min_exclusive, max_inclusive)
+BUY_TIERS = [
+    ("over-1000", "Over $1,000", 1000.0, None),
+    ("500-1000", "$500 – $1,000", 500.0, 1000.0),
+    ("100-500", "$100 – $500", 100.0, 500.0),
+    ("under-100", "$100 or less", None, 100.0),
+]
+
 LATEST_LISTINGS_CTE = """
 WITH latest AS (
     SELECT s.*, ROW_NUMBER() OVER (
@@ -210,6 +218,56 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
             if run_info.get("metrics"):
                 run_info["metrics"] = json.loads(run_info["metrics"])
             return {"run": run_info, "gainers": side("DESC"), "losers": side("ASC")}
+        finally:
+            c.close()
+
+    @app.get("/api/buys")
+    def api_buys(
+        min_prob: float = 0.7,
+        min_return: float = 0.02,
+        per_tier: int = Query(5, le=20),
+    ):
+        """Highest-conviction upside picks, bucketed into price tiers.
+
+        A listing qualifies when the latest run gives it P(up) >= min_prob AND
+        predicted return >= min_return; within each tier the biggest predicted
+        gainers rank first. Tiers compare the listed price at face value
+        (USD for TCGplayer, EUR for Cardmarket).
+        """
+        c = conn()
+        try:
+            run = c.execute(
+                "SELECT * FROM prediction_runs ORDER BY run_id DESC LIMIT 1"
+            ).fetchone()
+            criteria = {"min_prob": min_prob, "min_return": min_return,
+                        "per_tier": per_tier}
+            tiers = [
+                {"key": key, "label": label, "min": lo, "max": hi, "items": []}
+                for key, label, lo, hi in BUY_TIERS
+            ]
+            if run is None:
+                return {"run": None, "criteria": criteria, "tiers": tiers}
+            rows = c.execute(
+                """
+                SELECT p.card_id, c.name, c.set_name, c.rarity, c.image_small,
+                       p.source, p.variant, p.price, p.predicted_return, p.prob_up
+                FROM predictions p JOIN cards c USING (card_id)
+                WHERE p.run_id = ? AND p.prob_up >= ? AND p.predicted_return >= ?
+                ORDER BY p.predicted_return DESC, p.prob_up DESC
+                """,
+                (run["run_id"], min_prob, min_return),
+            ).fetchall()
+            for r in rows:
+                price = r["price"]
+                for tier, (_, _, lo, hi) in zip(tiers, BUY_TIERS):
+                    if (lo is None or price > lo) and (hi is None or price <= hi):
+                        if len(tier["items"]) < per_tier:
+                            tier["items"].append(dict(r))
+                        break
+            run_info = dict(run)
+            if run_info.get("metrics"):
+                run_info["metrics"] = json.loads(run_info["metrics"])
+            return {"run": run_info, "criteria": criteria, "tiers": tiers}
         finally:
             c.close()
 

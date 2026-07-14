@@ -61,6 +61,48 @@ def test_movers(client):
     assert top >= bottom
 
 
+def test_buys_tiers(client):
+    payload = client.get(
+        "/api/buys", params={"min_prob": 0.0, "min_return": -1.0, "per_tier": 4}
+    ).json()
+    assert [t["key"] for t in payload["tiers"]] == [
+        "over-1000", "500-1000", "100-500", "under-100",
+    ]
+    seen_any = False
+    for tier in payload["tiers"]:
+        assert len(tier["items"]) <= 4
+        for item in tier["items"]:
+            seen_any = True
+            price = item["price"]
+            assert tier["min"] is None or price > tier["min"]
+            assert tier["max"] is None or price <= tier["max"]
+        returns = [i["predicted_return"] for i in tier["items"]]
+        assert returns == sorted(returns, reverse=True)
+    assert seen_any  # demo market always has cheap listings at minimum
+
+    strict = client.get(
+        "/api/buys", params={"min_prob": 0.999, "min_return": 5.0}
+    ).json()
+    assert all(not t["items"] for t in strict["tiers"])
+    # thresholds actually gate: every default-criteria item clears the bar
+    default = client.get("/api/buys").json()
+    for tier in default["tiers"]:
+        for item in tier["items"]:
+            assert item["prob_up"] >= 0.7
+            assert item["predicted_return"] >= 0.02
+
+
+def test_buys_without_predictions(tmp_path):
+    db_path = tmp_path / "empty.db"
+    conn = db.connect(db_path)
+    demo.seed(conn, n_cards=4, days=5)
+    conn.close()
+    empty_client = TestClient(create_app(db_path=db_path))
+    payload = empty_client.get("/api/buys").json()
+    assert payload["run"] is None
+    assert all(not t["items"] for t in payload["tiers"])
+
+
 def test_index_served(client):
     resp = client.get("/")
     assert resp.status_code == 200

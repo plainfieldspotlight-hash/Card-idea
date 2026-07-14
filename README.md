@@ -92,7 +92,10 @@ truth about your data.
 
 ## Dashboard
 
-`pokeprice serve` gives you: stat tiles, top predicted gainers/losers, a
+`pokeprice serve` gives you: stat tiles, top predicted gainers/losers,
+**high-confidence buys** bucketed into four price tiers (over $1,000 ·
+$500–$1,000 · $100–$500 · $100 or less — listings with P(up) ≥ 70% and a
+predicted move ≥ +2%, tunable via `/api/buys?min_prob=&min_return=`), a
 searchable/sortable table (price, 7d change, 30d sparkline, predicted move,
 P(up)), and per-card detail with multi-series price history, crosshair tooltip,
 and a table view. Light and dark mode. When a card trades in both USD
@@ -102,7 +105,7 @@ than mixing currencies on one axis.
 ![Card detail](docs/detail-dark.png)
 
 The JSON API behind it: `/api/stats`, `/api/cards`, `/api/cards/{id}`,
-`/api/movers` (interactive docs at `/docs`).
+`/api/movers`, `/api/buys` (interactive docs at `/docs`).
 
 ## Project layout
 

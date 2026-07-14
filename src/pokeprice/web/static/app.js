@@ -127,6 +127,45 @@ function renderMovers(payload) {
   payload.losers.forEach((l) => lose.append(moverRow(l)));
 }
 
+/* ---------- high-confidence buys ---------- */
+function buyRow(item) {
+  const li = el("li");
+  li.append(thumbEl(item));
+  const name = el("div", "m-name");
+  const title = el("div");
+  title.append(el("b", null, item.name));
+  name.append(title, el("span", "sub",
+    `${fmtMoney(item.price, item.source === "cardmarket" ? "EUR" : "USD")} · ${item.variant} · ${item.source}`));
+  const stack = el("div", "m-stack");
+  stack.append(el("span", `m-val delta ${deltaClass(item.predicted_return)}`, fmtPct(item.predicted_return)));
+  stack.append(el("span", "sub", `P(up) ${(item.prob_up * 100).toFixed(0)}%`));
+  li.append(name, stack);
+  li.addEventListener("click", () => openDetail(item.card_id));
+  return li;
+}
+
+function renderBuys(payload) {
+  const grid = $("#buys-grid");
+  grid.replaceChildren();
+  const crit = payload.criteria;
+  $("#buys-criteria").textContent = payload.run
+    ? `P(up) ≥ ${(crit.min_prob * 100).toFixed(0)}% and predicted ≥ ${fmtPct(crit.min_return)} over ${payload.run.horizon_days}d · price tiers at face value (USD/EUR)`
+    : "";
+  for (const tier of payload.tiers) {
+    const box = el("div", "buy-tier");
+    box.append(el("h3", null, tier.label));
+    if (!tier.items.length) {
+      box.append(el("div", "empty-note",
+        payload.run ? "No cards clear the bar right now." : "Run `pokeprice predict` first."));
+    } else {
+      const list = el("ol", "movers");
+      tier.items.forEach((item) => list.append(buyRow(item)));
+      box.append(list);
+    }
+    grid.append(box);
+  }
+}
+
 /* ---------- sparkline (micro-chart: de-emphasis hue, accent end dot) ---------- */
 function sparkline(points, width = 120, height = 26) {
   const svg = document.createElementNS("http://www.w3.org/2000/svg", "svg");
@@ -542,12 +581,14 @@ document.addEventListener("keydown", (e) => {
 
 async function init() {
   try {
-    const [stats, movers] = await Promise.all([
+    const [stats, movers, buys] = await Promise.all([
       getJSON("/api/stats"),
       getJSON("/api/movers?limit=8&min_price=1"),
+      getJSON("/api/buys"),
     ]);
     renderTiles(stats);
     renderMovers(movers);
+    renderBuys(buys);
     await loadTable();
   } catch (err) {
     $("#model-badge").textContent = "failed to load — is the server running?";
