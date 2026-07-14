@@ -125,7 +125,9 @@ def test_collection_lifecycle(client):
     assert h["value"] == listing["price"] * 3
     expected_gain = (listing["price"] - 1.50) * 3
     assert abs(h["gain"] - expected_gain) < 1e-9
-    assert abs(payload["totals"]["value"] - h["value"]) < 1e-9
+    # totals are USD; EUR holdings convert at the rate echoed in the payload
+    mult = payload["totals"]["eur_usd"] if h["currency"] == "EUR" else 1.0
+    assert abs(payload["totals"]["value"] - h["value"] * mult) < 1e-6
 
     # unknown listing rejected
     bad = client.post("/api/collection", json={

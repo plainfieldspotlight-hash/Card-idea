@@ -116,6 +116,47 @@ def fetch_listings(card: dict, variant: str | None = None, limit: int = 5,
     return items
 
 
+INSIGHTS_URL = "https://api.ebay.com/buy/marketplace_insights/v1_beta/item_sales/search"
+_insights_blocked = {"until": 0.0}
+
+
+def fetch_sold(card: dict, variant: str | None = None, limit: int = 8,
+               session: requests.Session | None = None) -> list[dict]:
+    """Recent sold prices via the Marketplace Insights API.
+
+    This API is approval-gated (apply at developer.ebay.com); most keysets get
+    403. We probe once, then back off for a day so the card panel stays fast.
+    """
+    if time.time() < _insights_blocked["until"]:
+        return []
+    session = session or requests.Session()
+    token = _get_token(session)
+    if token is None:
+        return []
+    resp = session.get(
+        INSIGHTS_URL,
+        params={"q": search_query(card, variant), "limit": str(limit)},
+        headers={"Authorization": f"Bearer {token}",
+                 "X-EBAY-C-MARKETPLACE-ID": os.environ.get("EBAY_MARKETPLACE", "EBAY_US")},
+        timeout=30,
+    )
+    if resp.status_code == 403:
+        _insights_blocked["until"] = time.time() + 86400
+        return []
+    resp.raise_for_status()
+    sold = []
+    for it in resp.json().get("itemSales", []) or []:
+        price = it.get("lastSoldPrice") or {}
+        sold.append({
+            "title": it.get("title"),
+            "price": float(price["value"]) if price.get("value") else None,
+            "currency": price.get("currency"),
+            "sold_date": (it.get("lastSoldDate") or "")[:10] or None,
+            "url": it.get("itemWebUrl"),
+        })
+    return sold
+
+
 def annotate_vs_market(items: list[dict], market_price: float | None,
                        market_currency: str | None) -> list[dict]:
     """Attach vs_market (fraction below/above our tracked price) where comparable."""

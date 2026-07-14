@@ -36,8 +36,19 @@
     <div class="buys-grid" id="buys-grid"></div>
   </section>
 
+  <section class="card panel" aria-label="Deal radar">
+    <h2>Deal radar <span class="sub" id="deals-note"></span></h2>
+    <ol class="movers" id="deals-list"></ol>
+  </section>
+
   <section class="card panel" aria-label="My collection">
-    <h2>My collection <span class="sub">totals at face value (USD/EUR mixed) · add cards from any card's detail panel</span></h2>
+    <div class="panel-head">
+      <h2>My collection <span class="sub">totals in USD (EUR converts at the ECB daily rate) · add cards from any card's detail panel</span></h2>
+      <label class="import-label">Import CSV
+        <input type="file" id="collection-import" accept=".csv,text/csv" hidden>
+      </label>
+    </div>
+    <div class="sub hidden" id="import-result"></div>
     <div class="tiles collection-tiles" id="collection-tiles"></div>
     <div class="table-scroll">
       <table>
@@ -80,6 +91,7 @@
       <table id="cards-table">
         <thead>
           <tr>
+            <th class="star-col" title="Watchlist"></th>
             <th>Card</th>
             <th>Listing</th>
             <th class="num">Price</th>
@@ -101,6 +113,49 @@
     </div>
   </section>
 
+  <section class="card panel" aria-label="Watchlist and alerts">
+    <div class="watch-grid">
+      <div>
+        <h2>Watchlist <span class="sub">star cards in the table to track them without owning them</span></h2>
+        <ol class="movers" id="watchlist"></ol>
+      </div>
+      <div>
+        <h2>Alerts <span class="sub" id="alerts-note"></span></h2>
+        <form class="alert-settings" id="alert-settings">
+          <label>P(up) ≥ <input name="min_prob" type="number" min="0" max="1" step="0.05"></label>
+          <label>move ≥ <input name="min_return" type="number" min="0" max="1" step="0.01"></label>
+          <label>7d swing ≥ <input name="move_threshold" type="number" min="0" max="2" step="0.05"></label>
+          <label>portfolio drop ≥ <input name="collection_drop" type="number" min="0" max="1" step="0.01"></label>
+          <button type="submit">Save</button>
+          <button type="button" id="alerts-run">Check now</button>
+        </form>
+        <ol class="alert-log" id="alert-log"></ol>
+      </div>
+    </div>
+  </section>
+
+  <section class="card panel" aria-label="Model report card">
+    <h2>Model report card <span class="sub">every stored prediction, scored against what actually happened</span></h2>
+    <div class="tiles collection-tiles" id="report-tiles"></div>
+    <div class="report-grid">
+      <div class="table-scroll">
+        <table id="report-tiers">
+          <thead><tr><th>Price tier</th><th class="num">Resolved</th><th class="num">Hit rate</th><th class="num">Rank IC</th></tr></thead>
+          <tbody></tbody>
+        </table>
+      </div>
+      <div class="backtest-box">
+        <div class="panel-head">
+          <h3>Backtest <span class="sub">frozen model, held-out dates, fees included</span></h3>
+          <button type="button" id="backtest-run">Run backtest</button>
+        </div>
+        <div class="legend" id="backtest-legend"></div>
+        <div id="backtest-chart" class="chart" tabindex="0" aria-label="Backtest equity curve"></div>
+        <div class="sub" id="backtest-stats"></div>
+      </div>
+    </div>
+  </section>
+
   <section class="card panel hidden" id="detail-panel" aria-label="Card detail">
     <button class="close" id="detail-close" type="button" aria-label="Close detail">✕</button>
     <div class="detail-head" id="detail-head"></div>
@@ -109,6 +164,12 @@
       <div id="detail-chart" class="chart" tabindex="0"
            aria-label="Price history chart. Use left and right arrow keys to move the reading line."></div>
       <p class="sub axis-note" id="detail-axis-note"></p>
+    </div>
+    <div class="maxbid-row sub" id="maxbid-row">
+      Max-bid calculator: sell fee %
+      <input id="mb-fee" type="number" min="0" max="50" step="0.25" value="13.25">
+      · shipping <input id="mb-ship" type="number" min="0" step="0.25" value="1.00">
+      — shown per listing below, using the worst-case predicted price.
     </div>
     <div id="detail-predictions" class="detail-preds"></div>
     <div id="detail-ebay" class="detail-ebay"></div>

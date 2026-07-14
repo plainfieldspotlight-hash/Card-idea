@@ -68,6 +68,16 @@ def run_cycle(db_path: Path | str | None = None, use_github: bool = True,
             "model_kind": result["model_kind"],
             "listings_scored": result["listings_scored"],
         }
+        try:
+            from . import alerts
+
+            alert_result = alerts.run(conn, log=log)
+            status["steps"]["alerts"] = {
+                "ok": True, "new": alert_result["new_alerts"],
+                "channels": alert_result["channels"],
+            }
+        except Exception as exc:
+            status["steps"]["alerts"] = {"ok": False, "error": str(exc)}
         status["ok"] = True
     except Exception as exc:  # keep the loop alive; surface the error in status
         status["ok"] = False

@@ -5,7 +5,7 @@ import argparse
 import json
 import sys
 
-from . import config, db, demo, fetch, model
+from . import alerts, backtest, config, db, demo, fetch, model, report
 from .ingest import ingest_path
 
 
@@ -122,6 +122,110 @@ def cmd_stats(args) -> int:
     return 0
 
 
+def cmd_report(args) -> int:
+    conn = db.connect()
+    payload = report.prediction_report(conn)
+    overall = payload["overall"]
+    if not overall.get("n_resolved"):
+        print("No predictions have resolved yet — they score automatically once "
+              "snapshots arrive ~horizon days after each prediction run.")
+        return 0
+    print(f"Resolved predictions: {overall['n_resolved']} of {overall['n']}")
+    for key in ("hit_rate", "mae", "baseline_mae", "spearman_ic", "interval_coverage"):
+        if overall.get(key) is not None:
+            print(f"  {key:<20} {overall[key]:.4f}")
+    print("\nBy price tier:")
+    for tier in payload["by_tier"]:
+        hr = f"{tier['hit_rate']:.0%}" if tier.get("hit_rate") is not None else "  —"
+        print(f"  {tier['label']:<16} resolved {tier.get('n_resolved', 0):>5}  hit rate {hr}")
+    return 0
+
+
+def cmd_backtest(args) -> int:
+    conn = db.connect()
+    try:
+        result = backtest.run_backtest(
+            conn, capital=args.capital, top_k=args.top_k, fee_rate=args.fees,
+            min_price=args.min_price, max_price=args.max_price, rank=args.rank,
+        )
+    except model.InsufficientHistory as exc:
+        print(f"Cannot backtest yet: {exc}", file=sys.stderr)
+        return 1
+    print(f"Backtest ({result['n_periods']} periods from {result['test_from']}, "
+          f"top {args.top_k} picks, {args.fees:.1%} sell fee):")
+    print(f"  strategy   {result['total_return']:+8.1%}  "
+          f"(${args.capital:.0f} -> ${result['final_equity']:.2f}, after fees)")
+    print(f"  signal     {result['gross_return']:+8.1%}  (same picks before fees)")
+    print(f"  benchmark  {result['benchmark_return']:+8.1%}  (hold everything, no fees)")
+    print(f"  win rate   {result['win_rate']:.0%}   max drawdown {result['max_drawdown']:.1%}")
+    print(f"  {result['note']}")
+    return 0
+
+
+def cmd_alerts(args) -> int:
+    conn = db.connect()
+    result = alerts.run(conn)
+    if not result["new_alerts"]:
+        print("No new alerts.")
+        return 0
+    print(f"{result['new_alerts']} new alert(s), delivered via: "
+          f"{', '.join(result['channels'])}")
+    for a in result["alerts"]:
+        print(f"  [{a['kind']}] {a['message']}")
+    return 0
+
+
+def cmd_import_collection(args) -> int:
+    from .web.app import create_app  # reuse the same matching logic via the API
+    from fastapi.testclient import TestClient
+
+    with open(args.path, encoding="utf-8") as fh:
+        text = fh.read()
+    client = TestClient(create_app())
+    resp = client.post("/api/collection/import", content=text,
+                       headers={"Content-Type": "text/csv"})
+    if resp.status_code != 200:
+        print(f"Import failed: {resp.json().get('detail')}", file=sys.stderr)
+        return 1
+    payload = resp.json()
+    print(f"Imported {payload['imported']} holding(s); columns used: "
+          f"{payload['columns_used']}")
+    if payload["unmatched"]:
+        print(f"Unmatched ({len(payload['unmatched'])}): "
+              f"{', '.join(payload['unmatched'][:10])}")
+    return 0
+
+
+def cmd_graded(args) -> int:
+    from . import pricecharting
+
+    conn = db.connect()
+    try:
+        result = pricecharting.fetch_graded(conn, args.card_id, query=args.query)
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    if not result["matched"]:
+        print(f"No PriceCharting product matched query {result['query']!r}.")
+        return 1
+    print(f"Matched {result['matched']!r}: stored {result['snapshots']} graded "
+          f"price point(s) under source=pricecharting.")
+    return 0
+
+
+def cmd_event(args) -> int:
+    conn = db.connect()
+    conn.execute(
+        "INSERT INTO events (event_date, note, match) VALUES (?, ?, ?)",
+        (args.date, args.note, args.match),
+    )
+    conn.commit()
+    print(f"Recorded event {args.date}: {args.note!r} (matches cards containing "
+          f"{args.match!r}). It feeds the model's event_recency feature on the "
+          "next train.")
+    return 0
+
+
 def main(argv=None) -> int:
     parser = argparse.ArgumentParser(
         prog="pokeprice",
@@ -176,6 +280,39 @@ def main(argv=None) -> int:
 
     p = sub.add_parser("stats", help="print database summary")
     p.set_defaults(func=cmd_stats)
+
+    p = sub.add_parser("report", help="score past predictions against realized prices")
+    p.set_defaults(func=cmd_report)
+
+    p = sub.add_parser("backtest", help="simulate trading the model's picks on held-out history")
+    p.add_argument("--capital", type=float, default=500.0)
+    p.add_argument("--top-k", type=int, default=5)
+    p.add_argument("--fees", type=float, default=backtest.DEFAULT_FEE_RATE,
+                   help="sell-side fee rate (default %(default)s ≈ eBay)")
+    p.add_argument("--min-price", type=float, default=1.0)
+    p.add_argument("--max-price", type=float, default=None)
+    p.add_argument("--rank", choices=["worst_case", "expected"], default="worst_case")
+    p.set_defaults(func=cmd_backtest)
+
+    p = sub.add_parser("alerts", help="evaluate alert rules and deliver new alerts")
+    p.set_defaults(func=cmd_alerts)
+
+    p = sub.add_parser("import-collection", help="bulk-import holdings from a CSV export")
+    p.add_argument("path")
+    p.set_defaults(func=cmd_import_collection)
+
+    p = sub.add_parser("graded", help="fetch graded (PSA/BGS/CGC) prices via PriceCharting")
+    p.add_argument("card_id")
+    p.add_argument("--query", default=None,
+                   help="override the search query (default: name + set + number)")
+    p.set_defaults(func=cmd_graded)
+
+    p = sub.add_parser("event", help="record a hype event (reprint news, tournament result)")
+    p.add_argument("--date", required=True, help="YYYY-MM-DD")
+    p.add_argument("--note", required=True)
+    p.add_argument("--match", required=True,
+                   help="substring matched against card names, e.g. 'charizard'")
+    p.set_defaults(func=cmd_event)
 
     args = parser.parse_args(argv)
     return args.func(args)

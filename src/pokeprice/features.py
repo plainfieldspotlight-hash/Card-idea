@@ -28,6 +28,9 @@ NUM_FEATURES = [
     "price_vs_avg30",   # price relative to its 30-day average
     "set_age_days",     # how old the card's set is at observation time
     "n_hist",           # how many prior snapshots this listing has
+    "set_mom_7d",       # same-day 7d momentum of the rest of the set (leave-one-out)
+    "char_mom_7d",      # ... of other cards of the same character (all Charizards move together)
+    "event_recency",    # days since the latest matching hype event (reprints, tournaments)
 ]
 CAT_FEATURES = ["rarity", "supertype", "source", "variant"]
 ALL_FEATURES = NUM_FEATURES + CAT_FEATURES
@@ -38,7 +41,7 @@ def load_frame(conn: sqlite3.Connection) -> pd.DataFrame:
         """
         SELECT s.card_id, s.source, s.variant, s.snapshot_date, s.currency,
                s.market, s.low, s.mid, s.high, s.avg1, s.avg7, s.avg30,
-               c.name, c.set_name, c.rarity, c.supertype, c.set_release_date
+               c.name, c.set_id, c.set_name, c.rarity, c.supertype, c.set_release_date
         FROM price_snapshots s JOIN cards c USING (card_id)
         """,
         conn,
@@ -76,7 +79,27 @@ def _asof_price(df: pd.DataFrame, offset_days: float, tolerance_days: float,
     return merged.set_index("row_id")[out_col].reindex(np.arange(len(df)))
 
 
-def add_features(df: pd.DataFrame) -> pd.DataFrame:
+def load_events(conn: sqlite3.Connection) -> list[dict]:
+    return [dict(r) for r in conn.execute(
+        "SELECT event_date, note, match FROM events ORDER BY event_date")]
+
+
+def _loo_mean(df: pd.DataFrame, key: pd.Series, values: pd.Series) -> np.ndarray:
+    """Same-date mean of `values` over the key group, excluding the row itself."""
+    grp = values.groupby([key, df["snapshot_date"]], sort=False)
+    total = grp.transform("sum")
+    count = grp.transform("count")
+    own = values.fillna(0.0)
+    with np.errstate(invalid="ignore", divide="ignore"):
+        loo = np.where(
+            values.notna(),
+            np.where(count > 1, (total - own) / (count - 1), np.nan),
+            np.where(count > 0, total / count, np.nan),
+        )
+    return loo
+
+
+def add_features(df: pd.DataFrame, events: list[dict] | None = None) -> pd.DataFrame:
     df = df.sort_values("snapshot_date").reset_index(drop=True)
     df["log_price"] = np.log1p(df["price"])
 
@@ -103,6 +126,29 @@ def add_features(df: pd.DataFrame) -> pd.DataFrame:
 
     release = pd.to_datetime(df["set_release_date"], errors="coerce")
     df["set_age_days"] = (df["snapshot_date"] - release).dt.days.astype("float64")
+
+    # Cross-card momentum: how the rest of the set / the same character moved.
+    set_key = df["set_id"].fillna(df["set_name"]).fillna("?").astype(str)
+    character = (
+        df["name"].fillna("?").astype(str).str.split().str[0].str.lower()
+    )
+    df["set_mom_7d"] = _loo_mean(df, set_key, df["ret_7d"])
+    df["char_mom_7d"] = _loo_mean(df, character, df["ret_7d"])
+
+    # Hype events (reprint news, tournament results, ...): days since the most
+    # recent event whose match string appears in the card name, capped at 90.
+    df["event_recency"] = np.nan
+    for ev in events or []:
+        ev_date = pd.to_datetime(ev.get("event_date"), errors="coerce")
+        match = str(ev.get("match") or "").strip().lower()
+        if pd.isna(ev_date) or not match:
+            continue
+        hits = df["name"].str.lower().str.contains(match, regex=False, na=False)
+        delta = (df["snapshot_date"] - ev_date).dt.days.astype("float64")
+        applicable = hits & (delta >= 0) & (delta <= 90)
+        df.loc[applicable, "event_recency"] = np.fmin(
+            df.loc[applicable, "event_recency"], delta[applicable]
+        )
 
     for col in CAT_FEATURES:
         df[col] = df[col].fillna("Unknown").astype(str)

@@ -86,7 +86,51 @@ CREATE TABLE IF NOT EXISTS meta (
     key   TEXT PRIMARY KEY,
     value TEXT
 );
+
+CREATE TABLE IF NOT EXISTS watchlist (
+    watch_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    card_id  TEXT NOT NULL REFERENCES cards(card_id),
+    source   TEXT NOT NULL,
+    variant  TEXT NOT NULL DEFAULT 'normal',
+    added_at TEXT NOT NULL,
+    UNIQUE (card_id, source, variant)
+);
+
+CREATE TABLE IF NOT EXISTS alerts_log (
+    alert_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    created_at TEXT NOT NULL,
+    kind       TEXT NOT NULL,
+    card_id    TEXT,
+    source     TEXT,
+    variant    TEXT,
+    message    TEXT NOT NULL,
+    dedup_key  TEXT NOT NULL UNIQUE,
+    delivered  TEXT
+);
+
+CREATE TABLE IF NOT EXISTS events (
+    event_id   INTEGER PRIMARY KEY AUTOINCREMENT,
+    event_date TEXT NOT NULL,
+    note       TEXT NOT NULL,
+    match      TEXT NOT NULL
+);
 """
+
+# Columns added after the first release; applied idempotently on connect so
+# existing databases upgrade in place.
+MIGRATIONS = {
+    "predictions": ("predicted_low REAL", "predicted_high REAL", "prob_gain REAL"),
+}
+
+
+def _migrate(conn: sqlite3.Connection) -> None:
+    for table, columns in MIGRATIONS.items():
+        existing = {r[1] for r in conn.execute(f"PRAGMA table_info({table})")}
+        for coldef in columns:
+            name = coldef.split()[0]
+            if name not in existing:
+                conn.execute(f"ALTER TABLE {table} ADD COLUMN {coldef}")
+    conn.commit()
 
 
 def set_meta(conn: sqlite3.Connection, key: str, value) -> None:
@@ -120,6 +164,7 @@ def connect(path: Path | str | None = None) -> sqlite3.Connection:
     conn = sqlite3.connect(p)
     conn.row_factory = sqlite3.Row
     conn.executescript(SCHEMA)
+    _migrate(conn)
     return conn
 
 

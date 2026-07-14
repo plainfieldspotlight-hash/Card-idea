@@ -26,6 +26,9 @@ MIN_PRICE = float(os.environ.get("POKEPRICE_MIN_PRICE", "0.25"))
 # Forward-looking window (days) that predictions cover by default.
 DEFAULT_HORIZON_DAYS = int(os.environ.get("POKEPRICE_HORIZON", "7"))
 
+# "Big move" threshold for the P(gain >= X) classifier.
+BIG_GAIN = float(os.environ.get("POKEPRICE_BIG_GAIN", "0.10"))
+
 TCG_API_BASE = os.environ.get("POKEPRICE_API_BASE", "https://api.pokemontcg.io/v2")
 TCG_API_KEY_ENV = "POKEMONTCG_API_KEY"
 

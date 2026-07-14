@@ -147,7 +147,14 @@ function buyRow(item) {
   name.append(title, el("span", "sub",
     `${fmtMoney(item.price, item.source === "cardmarket" ? "EUR" : "USD")} · ${item.variant} · ${item.source}`));
   const stack = el("div", "m-stack");
-  stack.append(el("span", `m-val delta ${deltaClass(item.predicted_return)}`, fmtPct(item.predicted_return)));
+  const val = el("span", `m-val delta ${deltaClass(item.predicted_return)}`, fmtPct(item.predicted_return));
+  if (item.predicted_low !== null && item.predicted_low !== undefined) {
+    val.title = `range ${fmtPct(item.predicted_low)} … ${fmtPct(item.predicted_high)}`;
+  }
+  stack.append(val);
+  if (item.predicted_low !== null && item.predicted_low !== undefined) {
+    stack.append(el("span", "sub", `worst ${fmtPct(item.predicted_low)}`));
+  }
   const subline = el("span", "sub", `P(up) ${(item.prob_up * 100).toFixed(0)}% · `);
   if (item.ebay_url) {
     const a = el("a", "ebay-link", "eBay ↗");
@@ -184,6 +191,237 @@ function renderBuys(payload) {
     grid.append(box);
   }
 }
+
+/* ---------- deal radar ---------- */
+function renderDeals(payload) {
+  const list = $("#deals-list");
+  list.replaceChildren();
+  const note = $("#deals-note");
+  if (payload.mode === "live") {
+    note.textContent = "model-liked cards with live eBay listings below your tracked market price";
+    if (!payload.deals.length) {
+      list.append(el("li", "empty-note", "No below-market listings for current picks — check back after the next fetch."));
+    }
+  } else {
+    note.textContent = "model picks + eBay search links · set EBAY_CLIENT_ID/SECRET for live below-market matching";
+    if (!payload.deals.length) {
+      list.append(el("li", "empty-note", "No qualifying picks yet — run `pokeprice predict`."));
+    }
+  }
+  for (const deal of payload.deals.slice(0, 8)) {
+    const li = el("li");
+    li.append(thumbEl(deal));
+    const name = el("div", "m-name");
+    const title = el("div");
+    title.append(el("b", null, deal.name));
+    name.append(title, el("span", "sub",
+      `${deal.set_name ?? ""} · ${deal.variant} · tracked ${fmtMoney(deal.price, deal.currency)}`));
+    const stack = el("div", "m-stack");
+    stack.append(el("span", `m-val delta ${deltaClass(deal.predicted_return)}`,
+      fmtPct(deal.predicted_return)));
+    const subline = el("span", "sub");
+    if (deal.best_listing) {
+      const a = el("a", "ebay-link",
+        `${fmtMoney(deal.best_listing.price, deal.best_listing.currency)} on eBay (${fmtPct(deal.best_listing.vs_market)} vs market) ↗`);
+      a.href = deal.best_listing.url;
+      a.target = "_blank"; a.rel = "noopener";
+      a.addEventListener("click", (e) => e.stopPropagation());
+      subline.append(a);
+    } else {
+      const a = el("a", "ebay-link", "search eBay ↗");
+      a.href = deal.ebay_url; a.target = "_blank"; a.rel = "noopener";
+      a.addEventListener("click", (e) => e.stopPropagation());
+      subline.append(a);
+    }
+    stack.append(subline);
+    li.append(name, stack);
+    li.addEventListener("click", () => openDetail(deal.card_id));
+    list.append(li);
+  }
+}
+
+/* ---------- watchlist & alerts ---------- */
+async function toggleWatch(item, watched) {
+  if (watched) {
+    await fetch(`/api/watchlist?card_id=${encodeURIComponent(item.card_id)}` +
+      `&source=${encodeURIComponent(item.source)}&variant=${encodeURIComponent(item.variant)}`,
+      { method: "DELETE" });
+  } else {
+    await fetch("/api/watchlist", {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({ card_id: item.card_id, source: item.source, variant: item.variant }),
+    });
+  }
+  loadWatchAndAlerts();
+}
+
+async function loadWatchAndAlerts() {
+  const [watch, alertsPayload] = await Promise.all([
+    getJSON("/api/watchlist"), getJSON("/api/alerts"),
+  ]);
+  const list = $("#watchlist");
+  list.replaceChildren();
+  if (!watch.items.length) {
+    list.append(el("li", "empty-note", "Not watching anything yet — click the ☆ next to any card."));
+  }
+  for (const item of watch.items) {
+    const li = el("li");
+    const star = el("button", "star on", "★");
+    star.title = "Stop watching";
+    star.addEventListener("click", (e) => { e.stopPropagation(); toggleWatch(item, true); });
+    li.append(star, thumbEl(item));
+    const name = el("div", "m-name");
+    const title = el("div");
+    title.append(el("b", null, item.name));
+    name.append(title, el("span", "sub", `${item.set_name ?? ""} · ${item.variant} · ${item.source}`));
+    const stack = el("div", "m-stack");
+    stack.append(el("span", `m-val delta ${deltaClass(item.predicted_return)}`, fmtPct(item.predicted_return)));
+    stack.append(el("span", "sub", fmtMoney(item.price, item.currency)));
+    li.append(name, stack);
+    li.addEventListener("click", () => openDetail(item.card_id));
+    list.append(li);
+  }
+
+  const settings = alertsPayload.settings;
+  const form = $("#alert-settings");
+  for (const key of ["min_prob", "min_return", "move_threshold", "collection_drop"]) {
+    if (form.elements[key]) form.elements[key].value = settings[key];
+  }
+  const log = $("#alert-log");
+  log.replaceChildren();
+  $("#alerts-note").textContent = alertsPayload.alerts.length
+    ? `${alertsPayload.alerts.length} recent` : "none fired yet";
+  for (const a of alertsPayload.alerts.slice(0, 12)) {
+    const li = el("li");
+    li.append(el("span", `alert-kind kind-${a.kind}`, a.kind));
+    li.append(el("span", null, ` ${a.message} `));
+    li.append(el("span", "sub", (a.created_at || "").slice(0, 10)));
+    log.append(li);
+  }
+}
+
+$("#alert-settings").addEventListener("submit", async (e) => {
+  e.preventDefault();
+  const form = e.target;
+  const body = {};
+  for (const key of ["min_prob", "min_return", "move_threshold", "collection_drop"]) {
+    body[key] = Number(form.elements[key].value);
+  }
+  await fetch("/api/alerts/settings", {
+    method: "PUT", headers: { "Content-Type": "application/json" },
+    body: JSON.stringify(body),
+  });
+  loadWatchAndAlerts();
+});
+$("#alerts-run").addEventListener("click", async () => {
+  await fetch("/api/alerts/run", { method: "POST" });
+  loadWatchAndAlerts();
+});
+
+/* ---------- model report card & backtest ---------- */
+function pctOrDash(v, digits = 0) {
+  return v === null || v === undefined ? "—" : (v * 100).toFixed(digits) + "%";
+}
+
+async function loadReport() {
+  const payload = await getJSON("/api/report");
+  const tiles = $("#report-tiles");
+  tiles.replaceChildren();
+  const o = payload.overall;
+  const tileData = [
+    { label: "Predictions scored", value: `${o.n_resolved ?? 0} / ${o.n ?? 0}`,
+      delta: "resolve ~horizon days after each run" },
+    { label: "Live hit rate", value: pctOrDash(o.hit_rate), delta: "direction correct" },
+    { label: "Rank IC", value: o.spearman_ic === null || o.spearman_ic === undefined ? "—" : o.spearman_ic.toFixed(2),
+      delta: "predicted vs realized ordering" },
+    { label: "Range coverage", value: pctOrDash(o.interval_coverage),
+      delta: "realized inside predicted range (target ≈80%)" },
+  ];
+  for (const t of tileData) {
+    const tile = el("div", "card tile");
+    tile.append(el("div", "label", t.label), el("div", "value", t.value));
+    if (t.delta) tile.append(el("div", "delta", t.delta));
+    tiles.append(tile);
+  }
+  const tbody = $("#report-tiers tbody");
+  tbody.replaceChildren();
+  for (const tier of payload.by_tier) {
+    const tr = el("tr");
+    tr.append(el("td", null, tier.label));
+    tr.append(el("td", "num", String(tier.n_resolved ?? 0)));
+    tr.append(el("td", "num", pctOrDash(tier.hit_rate)));
+    tr.append(el("td", "num", tier.spearman_ic === null || tier.spearman_ic === undefined ? "—" : tier.spearman_ic.toFixed(2)));
+    tbody.append(tr);
+  }
+  renderBacktest(payload.backtest);
+}
+
+function renderBacktest(result) {
+  const statsEl = $("#backtest-stats");
+  const chart = $("#backtest-chart");
+  const legend = $("#backtest-legend");
+  legend.replaceChildren();
+  if (!result) {
+    chart.replaceChildren();
+    statsEl.textContent = "Not run yet — click “Run backtest” to simulate trading the model's picks on held-out history.";
+    return;
+  }
+  const series = [
+    { name: "strategy (after fees)", color: cssVar("--series-1"), currency: "USD", points: result.equity },
+    { name: "hold everything (no fees)", color: cssVar("--series-5"), currency: "USD", points: result.benchmark_equity },
+  ];
+  for (const s of series) {
+    const key = el("span", "key");
+    const swatch = el("span", "swatch");
+    swatch.style.borderTopColor = s.color;
+    key.append(swatch, el("span", null, s.name));
+    legend.append(key);
+  }
+  lineChart(chart, series, { indexed: false });
+  statsEl.textContent =
+    `${result.n_periods} periods from ${result.test_from} · strategy ${fmtPct(result.total_return)} after fees ` +
+    `(${fmtPct(result.gross_return)} before fees — the signal itself) vs benchmark ${fmtPct(result.benchmark_return)} · ` +
+    `win rate ${pctOrDash(result.win_rate)} · max drawdown ${pctOrDash(result.max_drawdown, 1)} · ` +
+    `top ${result.params.top_k} picks, ${(result.params.fee_rate * 100).toFixed(1)}% sell fee per flip. ${result.note}`;
+}
+
+$("#backtest-run").addEventListener("click", async () => {
+  const btn = $("#backtest-run");
+  btn.disabled = true;
+  btn.textContent = "Running…";
+  try {
+    const resp = await fetch("/api/backtest", { method: "POST" });
+    const payload = await resp.json();
+    if (!resp.ok) {
+      $("#backtest-stats").textContent = payload.detail || "Backtest failed.";
+    } else {
+      renderBacktest(payload);
+    }
+  } finally {
+    btn.disabled = false;
+    btn.textContent = "Run backtest";
+  }
+});
+
+/* ---------- collection import ---------- */
+$("#collection-import").addEventListener("change", async (e) => {
+  const file = e.target.files[0];
+  if (!file) return;
+  const text = await file.text();
+  const resp = await fetch("/api/collection/import", {
+    method: "POST", headers: { "Content-Type": "text/csv" }, body: text,
+  });
+  const payload = await resp.json();
+  const note = $("#import-result");
+  note.classList.remove("hidden");
+  note.textContent = resp.ok
+    ? `Imported ${payload.imported} holding(s).` +
+      (payload.unmatched.length ? ` Unmatched: ${payload.unmatched.slice(0, 6).join(", ")}` : "")
+    : `Import failed: ${payload.detail}`;
+  e.target.value = "";
+  loadCollection();
+});
 
 /* ---------- collection ---------- */
 async function loadCollection() {
@@ -327,13 +565,24 @@ function renderTable(payload) {
     const td = el("td", "empty-note",
       "No cards match. If the database is empty: `pokeprice demo` for a demo market, " +
       "`pokeprice ingest pokemon.zip` for your own data, or `pokeprice fetch` for live data.");
-    td.colSpan = 7;
+    td.colSpan = 8;
     tr.append(td);
     body.append(tr);
   }
   for (const item of payload.items) {
     const tr = el("tr");
     tr.tabIndex = 0;
+    const starTd = el("td", "star-cell");
+    const watched = Boolean(item.watched);
+    const star = el("button", `star${watched ? " on" : ""}`, watched ? "★" : "☆");
+    star.title = watched ? "Stop watching" : "Add to watchlist";
+    star.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await toggleWatch(item, watched);
+      loadTable();
+    });
+    starTd.append(star);
+    tr.append(starTd);
     const cardTd = el("td");
     const cell = el("div", "cell-card");
     cell.append(thumbEl(item));
@@ -353,6 +602,10 @@ function renderTable(payload) {
     sparkTd.append(sparkline(item.spark || []));
     const predTd = el("td", `num delta ${deltaClass(item.predicted_return)}`);
     predTd.append(el("b", null, fmtPct(item.predicted_return)));
+    if (item.predicted_low !== null && item.predicted_low !== undefined) {
+      predTd.title = `range ${fmtPct(item.predicted_low)} … ${fmtPct(item.predicted_high)}`;
+      predTd.append(el("span", "sub", ` ${fmtPct(item.predicted_low)}…${fmtPct(item.predicted_high)}`));
+    }
     const probTd = el("td", "num", item.prob_up === null || item.prob_up === undefined ? "—" : (item.prob_up * 100).toFixed(0) + "%");
 
     tr.append(cardTd, listingTd, priceTd, chTd, sparkTd, predTd, probTd);
@@ -636,6 +889,19 @@ async function openDetail(cardId) {
       line.append(document.createTextNode(
         ` over ${p.horizon_days}d · P(up) ${(p.prob_up * 100).toFixed(0)}% · ${p.model_kind}`));
       chip.append(line);
+      if (p.predicted_low !== null && p.predicted_low !== undefined) {
+        chip.append(el("div", "sub",
+          `range ${fmtPct(p.predicted_low)} … ${fmtPct(p.predicted_high)}` +
+          (p.prob_gain !== null && p.prob_gain !== undefined
+            ? ` · P(+10%) ${(p.prob_gain * 100).toFixed(0)}%` : "")));
+      }
+      if (l.latest_price) {
+        const maxBid = el("div", "sub maxbid");
+        maxBid.dataset.price = l.latest_price;
+        maxBid.dataset.low = p.predicted_low ?? p.predicted_return * 0.5;
+        maxBid.dataset.currency = l.currency || "USD";
+        chip.append(maxBid);
+      }
     } else {
       chip.append(el("div", "sub", "no prediction yet"));
     }
@@ -682,6 +948,7 @@ async function openDetail(cardId) {
     chip.append(actions);
     predWrap.append(chip);
   }
+  updateMaxBids();
   loadEbay(cardId, listings[0]?.variant ?? "normal");
 
   // table view twin — every charted value reachable without hover
@@ -717,6 +984,24 @@ async function openDetail(cardId) {
   $("#detail-chart").focus({ preventScroll: true });
 }
 
+/* ---------- max-bid calculator (pure client-side) ---------- */
+function updateMaxBids() {
+  const fee = Number($("#mb-fee").value) / 100 || 0;
+  const ship = Number($("#mb-ship").value) || 0;
+  document.querySelectorAll(".maxbid").forEach((node) => {
+    const price = Number(node.dataset.price);
+    const low = Number(node.dataset.low);
+    // conservative expected sale = tracked price at the worst-case prediction,
+    // minus seller fees and shipping; paying more than this risks a loss
+    const maxBid = price * (1 + low) * (1 - fee) - ship;
+    node.textContent = maxBid > 0
+      ? `max bid ≈ ${fmtMoney(maxBid, node.dataset.currency)} to stay profitable in the worst case`
+      : "no profitable bid at the worst-case prediction";
+  });
+}
+$("#mb-fee").addEventListener("input", updateMaxBids);
+$("#mb-ship").addEventListener("input", updateMaxBids);
+
 /* ---------- wiring ---------- */
 function debounce(fn, ms) {
   let t;
@@ -744,15 +1029,17 @@ document.addEventListener("keydown", (e) => {
 
 async function init() {
   try {
-    const [stats, movers, buys] = await Promise.all([
+    const [stats, movers, buys, deals] = await Promise.all([
       getJSON("/api/stats"),
       getJSON("/api/movers?limit=8&min_price=1"),
       getJSON("/api/buys"),
+      getJSON("/api/deals"),
     ]);
     renderTiles(stats);
     renderMovers(movers);
     renderBuys(buys);
-    await Promise.all([loadTable(), loadCollection()]);
+    renderDeals(deals);
+    await Promise.all([loadTable(), loadCollection(), loadWatchAndAlerts(), loadReport()]);
   } catch (err) {
     $("#model-badge").textContent = "failed to load — is the server running?";
     console.error(err);
