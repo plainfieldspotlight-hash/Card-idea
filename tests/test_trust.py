@@ -32,6 +32,25 @@ def test_quantile_outputs(trained):
         assert 0.0 <= r["prob_gain"] <= 1.0
 
 
+def test_seed_ensemble_and_tune(conn, tmp_path):
+    demo.seed(conn, n_cards=16, days=70)
+    metrics = model.train(conn, horizon_days=7, model_file=tmp_path / "m.joblib",
+                          tune=True, log=lambda *_: None)
+    assert metrics["params"] in model.TUNE_GRID
+    assert len(metrics["tune_results"]) == len(model.TUNE_GRID)
+    best_ic = max(r["ic"] for r in metrics["tune_results"])
+    assert metrics["params"] == next(
+        r["params"] for r in metrics["tune_results"] if r["ic"] == best_ic)
+    bundle = model.load_bundle(tmp_path / "m.joblib")
+    assert isinstance(bundle.regressor, model._AvgReg)
+    assert len(bundle.regressor.models) == len(model.ENSEMBLE_SEEDS)
+    import numpy as np
+    X = np.zeros((2, len(bundle.feature_names)))
+    member = bundle.regressor.models[0].predict(X)
+    avg = bundle.regressor.predict(X)
+    assert avg.shape == member.shape
+
+
 def test_stale_model_falls_back(trained, monkeypatch):
     conn, model_file, _ = trained
     # simulate a feature-set change since training

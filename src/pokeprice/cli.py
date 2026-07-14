@@ -64,7 +64,7 @@ def cmd_demo(args) -> int:
 def cmd_train(args) -> int:
     conn = db.connect()
     try:
-        metrics = model.train(conn, horizon_days=args.horizon)
+        metrics = model.train(conn, horizon_days=args.horizon, tune=args.tune)
     except model.InsufficientHistory as exc:
         print(f"Not enough history to train yet.\n{exc}", file=sys.stderr)
         return 1
@@ -293,6 +293,8 @@ def main(argv=None) -> int:
     p = sub.add_parser("train", help="train the movement model on accumulated history")
     p.add_argument("--horizon", type=int, default=config.DEFAULT_HORIZON_DAYS,
                    help="days ahead to predict (default %(default)s)")
+    p.add_argument("--tune", action="store_true",
+                   help="search a small hyperparameter grid on an inner time split first")
     p.set_defaults(func=cmd_train)
 
     p = sub.add_parser("predict", help="score every listing and store a prediction run")

@@ -53,17 +53,48 @@ class Bundle:
     feature_names: list = field(default_factory=list)
 
 
-def _hgb(kind: str, **kw):
+ENSEMBLE_SEEDS = (7, 17, 27)
+
+DEFAULT_PARAMS = dict(learning_rate=0.06, max_leaf_nodes=31,
+                      min_samples_leaf=20, l2_regularization=1.0)
+
+# small, sane grid for --tune; evaluated by rank IC on an inner time split
+TUNE_GRID = [
+    DEFAULT_PARAMS,
+    dict(learning_rate=0.10, max_leaf_nodes=31, min_samples_leaf=20, l2_regularization=1.0),
+    dict(learning_rate=0.03, max_leaf_nodes=31, min_samples_leaf=20, l2_regularization=1.0),
+    dict(learning_rate=0.06, max_leaf_nodes=63, min_samples_leaf=10, l2_regularization=1.0),
+    dict(learning_rate=0.06, max_leaf_nodes=31, min_samples_leaf=40, l2_regularization=3.0),
+    dict(learning_rate=0.10, max_leaf_nodes=15, min_samples_leaf=20, l2_regularization=1.0),
+]
+
+
+class _AvgReg:
+    """Average of same-model fits over different seeds (variance reduction)."""
+
+    def __init__(self, models):
+        self.models = models
+
+    def predict(self, X):
+        return np.mean([m.predict(X) for m in self.models], axis=0)
+
+
+class _AvgClf:
+    def __init__(self, models):
+        self.models = models
+
+    def predict_proba(self, X):
+        return np.mean([m.predict_proba(X) for m in self.models], axis=0)
+
+
+def _hgb(kind: str, params: dict | None = None, seed: int = 7, **kw):
     cls = HistGradientBoostingRegressor if kind == "reg" else HistGradientBoostingClassifier
     return cls(
         max_iter=kw.pop("max_iter", 300),
-        learning_rate=0.06,
-        max_leaf_nodes=31,
-        min_samples_leaf=20,
-        l2_regularization=1.0,
         early_stopping=True,
         validation_fraction=0.15,
-        random_state=7,
+        random_state=seed,
+        **{**DEFAULT_PARAMS, **(params or {})},
         **kw,
     )
 
@@ -78,30 +109,49 @@ def build_training_frame(conn: sqlite3.Connection, horizon_days: int) -> pd.Data
     return df.dropna(subset=["label"])
 
 
-def fit_bundle(df_train: pd.DataFrame, horizon_days: int) -> tuple[Bundle, tuple]:
-    """Fit all models on an already-labeled frame; returns (bundle, matrix builder state)."""
+def fit_bundle(df_train: pd.DataFrame, horizon_days: int,
+               params: dict | None = None,
+               seeds: tuple = ENSEMBLE_SEEDS) -> tuple[Bundle, tuple]:
+    """Fit all models on an already-labeled frame; returns (bundle, matrix builder state).
+
+    The point-estimate models are seed-ensembles (averaged); the quantile
+    models are single fits — their job is the range, not the ranking.
+    """
     y = df_train["label"].clip(*LABEL_CLIP).to_numpy()
     X, feature_names, cat_indices, cat_maps = features.build_matrix(df_train)
 
-    reg = _hgb("reg", loss="absolute_error", max_iter=400,
-               categorical_features=cat_indices)
-    reg.fit(X, y)
-    reg_low = _hgb("reg", loss="quantile", quantile=QUANTILES[0],
+    regs = []
+    for seed in seeds:
+        r = _hgb("reg", params, seed, loss="absolute_error", max_iter=400,
+                 categorical_features=cat_indices)
+        r.fit(X, y)
+        regs.append(r)
+    reg = _AvgReg(regs) if len(regs) > 1 else regs[0]
+
+    reg_low = _hgb("reg", params, seeds[0], loss="quantile", quantile=QUANTILES[0],
                    categorical_features=cat_indices)
     reg_low.fit(X, y)
-    reg_high = _hgb("reg", loss="quantile", quantile=QUANTILES[1],
+    reg_high = _hgb("reg", params, seeds[0], loss="quantile", quantile=QUANTILES[1],
                     categorical_features=cat_indices)
     reg_high.fit(X, y)
 
     clf = clf_gain = None
     up = (y > 0).astype(int)
     if len(np.unique(up)) == 2:
-        clf = _hgb("clf", categorical_features=cat_indices)
-        clf.fit(X, up)
+        members = []
+        for seed in seeds:
+            c = _hgb("clf", params, seed, categorical_features=cat_indices)
+            c.fit(X, up)
+            members.append(c)
+        clf = _AvgClf(members) if len(members) > 1 else members[0]
     big = (y >= config.BIG_GAIN).astype(int)
     if len(np.unique(big)) == 2:
-        clf_gain = _hgb("clf", categorical_features=cat_indices)
-        clf_gain.fit(X, big)
+        members = []
+        for seed in seeds:
+            c = _hgb("clf", params, seed, categorical_features=cat_indices)
+            c.fit(X, big)
+            members.append(c)
+        clf_gain = _AvgClf(members) if len(members) > 1 else members[0]
 
     bundle = Bundle(
         regressor=reg, classifier=clf, cat_maps=cat_maps,
@@ -110,6 +160,27 @@ def fit_bundle(df_train: pd.DataFrame, horizon_days: int) -> tuple[Bundle, tuple
         feature_names=list(feature_names),
     )
     return bundle, (feature_names, cat_indices)
+
+
+def tune_params(df_train: pd.DataFrame, horizon_days: int, log=print) -> tuple[dict, list]:
+    """Pick TUNE_GRID params by rank IC on an inner time split of the train set."""
+    dates = df_train["snapshot_date"]
+    inner_cutoff = dates.quantile(0.8)
+    inner_train = df_train[dates <= inner_cutoff]
+    inner_valid = df_train[dates > inner_cutoff]
+    if len(inner_train) < MIN_TRAIN_ROWS or len(inner_valid) < 30:
+        return dict(DEFAULT_PARAMS), []
+    y_valid = inner_valid["label"].clip(*LABEL_CLIP).to_numpy()
+    results = []
+    for params in TUNE_GRID:
+        bundle, _ = fit_bundle(inner_train, horizon_days, params=params,
+                               seeds=(ENSEMBLE_SEEDS[0],))
+        pred = apply_bundle(bundle, inner_valid)["predicted"]
+        ic = _spearman(pred, y_valid) or -1.0
+        results.append({"params": params, "ic": round(ic, 4)})
+        log(f"  tune {params}: IC {ic:.4f}")
+    best = max(results, key=lambda r: r["ic"])
+    return dict(best["params"]), results
 
 
 def apply_bundle(bundle: Bundle, df: pd.DataFrame) -> dict[str, np.ndarray]:
@@ -136,6 +207,8 @@ def train(
     conn: sqlite3.Connection,
     horizon_days: int = config.DEFAULT_HORIZON_DAYS,
     model_file: Path | None = None,
+    tune: bool = False,
+    log=print,
 ) -> dict:
     df = build_training_frame(conn, horizon_days)
     if len(df) < MIN_TRAIN_ROWS:
@@ -155,7 +228,9 @@ def train(
         split = int(len(df) * 0.8)
         train_mask = np.arange(len(df)) < split
 
-    bundle, _ = fit_bundle(df[train_mask], horizon_days)
+    params, tune_results = (tune_params(df[train_mask], horizon_days, log=log)
+                            if tune else (None, []))
+    bundle, _ = fit_bundle(df[train_mask], horizon_days, params=params)
     valid = df[~train_mask]
     yva = valid["label"].clip(*LABEL_CLIP).to_numpy()
     preds = apply_bundle(bundle, valid)
@@ -178,6 +253,8 @@ def train(
         "big_gain_base_rate": float(np.mean(big_actual)),
         "big_gain_auc": _auc(preds["prob_gain"], big_actual),
         "features": bundle.feature_names,
+        "params": params or dict(DEFAULT_PARAMS),
+        "tune_results": tune_results,
     }
     bundle.metrics = metrics
     joblib.dump(bundle, model_file or config.model_path())

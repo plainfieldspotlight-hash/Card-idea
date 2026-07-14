@@ -31,6 +31,11 @@ NUM_FEATURES = [
     "set_mom_7d",       # same-day 7d momentum of the rest of the set (leave-one-out)
     "char_mom_7d",      # ... of other cards of the same character (all Charizards move together)
     "event_recency",    # days since the latest matching hype event (reprints, tournaments)
+    "market_mom_7d",    # same-day 7d momentum of the whole tracked market (leave-one-out)
+    "ret_7d_rank",      # cross-sectional percentile of ret_7d on this date (relative momentum)
+    "ret_30d_rank",
+    "mom_vol_adj",      # risk-adjusted momentum: ret_7d / volatility
+    "range_pos",        # where price sits in its recent min..max range (0 = low, 1 = high)
 ]
 CAT_FEATURES = ["rarity", "supertype", "source", "variant"]
 ALL_FEATURES = NUM_FEATURES + CAT_FEATURES
@@ -127,13 +132,28 @@ def add_features(df: pd.DataFrame, events: list[dict] | None = None) -> pd.DataF
     release = pd.to_datetime(df["set_release_date"], errors="coerce")
     df["set_age_days"] = (df["snapshot_date"] - release).dt.days.astype("float64")
 
-    # Cross-card momentum: how the rest of the set / the same character moved.
+    # Cross-card momentum: how the rest of the set / character / market moved.
     set_key = df["set_id"].fillna(df["set_name"]).fillna("?").astype(str)
     character = (
         df["name"].fillna("?").astype(str).str.split().str[0].str.lower()
     )
     df["set_mom_7d"] = _loo_mean(df, set_key, df["ret_7d"])
     df["char_mom_7d"] = _loo_mean(df, character, df["ret_7d"])
+    df["market_mom_7d"] = _loo_mean(
+        df, pd.Series("all", index=df.index), df["ret_7d"])
+
+    # Relative momentum: a +5% week means something different when everything
+    # rallied vs when the market was flat — ranks capture that directly.
+    df["ret_7d_rank"] = df.groupby("snapshot_date")["ret_7d"].rank(pct=True)
+    df["ret_30d_rank"] = df.groupby("snapshot_date")["ret_30d"].rank(pct=True)
+    df["mom_vol_adj"] = df["ret_7d"] / (df["vol"] + 0.01)
+
+    # Position inside the recent trading range (rolling last ~30 snapshots).
+    grouped_price = df.groupby(GROUP_KEYS, sort=False)["price"]
+    rmin = grouped_price.transform(lambda s: s.rolling(30, min_periods=5).min())
+    rmax = grouped_price.transform(lambda s: s.rolling(30, min_periods=5).max())
+    span = rmax - rmin
+    df["range_pos"] = np.where(span > 0, (df["price"] - rmin) / span, np.nan)
 
     # Hype events (reprint news, tournament results, ...): days since the most
     # recent event whose match string appears in the card name, capped at 90.

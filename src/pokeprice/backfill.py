@@ -250,8 +250,14 @@ def backfill(
     while d >= EARLIEST and len(wanted_days) * every < days:
         wanted_days.append(d)
         d -= timedelta(days=every)
-    done = set(db.get_meta(conn, META_DONE) or [])
-    todo = [d for d in wanted_days if d.isoformat() not in done]
+    # done-tracking is per (day, groups): expanding to new sets later re-processes
+    # old days for the missing groups only (idempotent inserts make that cheap).
+    raw_done = db.get_meta(conn, META_DONE) or {}
+    if isinstance(raw_done, list):  # legacy flat format: scope unknown -> reprocess
+        raw_done = {day: [] for day in raw_done}
+    done: dict[str, list] = raw_done
+    todo = [d for d in wanted_days
+            if not active_groups.issubset(set(done.get(d.isoformat(), [])))]
     progress(f"Backfilling {len(todo)} day(s) (~3 MB each), "
              f"{end - timedelta(days=days)} .. {end}, every {every} day(s)")
 
@@ -265,7 +271,7 @@ def backfill(
                 with session.get(url, stream=True, timeout=120) as resp:
                     if resp.status_code == 404:
                         progress(f"  {day}: no archive (skipped)")
-                        done.add(day)
+                        done[day] = sorted(set(done.get(day, [])) | active_groups)
                         continue
                     resp.raise_for_status()
                     with open(archive, "wb") as fh:
@@ -295,8 +301,8 @@ def backfill(
             added = db.insert_snapshots(conn, snaps)
             total_snaps += added
             archive.unlink(missing_ok=True)
-            done.add(day)
-            db.set_meta(conn, META_DONE, sorted(done))
+            done[day] = sorted(set(done.get(day, [])) | active_groups)
+            db.set_meta(conn, META_DONE, done)
             progress(f"  {day}: +{added} snapshots ({i + 1}/{len(todo)})")
     return {
         "days_processed": len(todo),

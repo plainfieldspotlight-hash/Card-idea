@@ -79,9 +79,11 @@ ok/failed). Prefer external scheduling? The equivalent cron line:
 An [API key](https://dev.pokemontcg.io/) via `POKEMONTCG_API_KEY` raises the
 Pokemon TCG API rate limits (optional but recommended for full crawls).
 
-Verified on real data: two sets backfilled over 60 days (13.5k snapshots)
-train to ~59% direction accuracy and 0.27 rank IC on a held-out window —
-similar to the synthetic-market results, now on genuine prices.
+Verified on real data: six sets backfilled over a year (122 archive days,
+284k snapshots) train on ~93k observations and score 58% direction accuracy /
+0.25 rank IC across 23k held-out predictions (`--tune`). Accuracy scales with
+data — backfill more sets and more days, run auto-fetch daily, and check
+`pokeprice report` to see the live numbers on your own database.
 
 ## Trusting the model (or knowing not to)
 
@@ -101,10 +103,14 @@ similar to the synthetic-market results, now on genuine prices.
   reports strategy-after-fees vs the raw signal vs just-holding — on the demo
   market the signal is real (+56% gross) and weekly flipping still loses to
   ~13% fees, which is exactly the honest lesson.
-- **Cross-card features** — set momentum and same-character momentum
-  (leave-one-out, so a card never sees itself) plus hype-event recency
-  (`pokeprice event --date ... --note "reprint" --match charizard`). On the
-  demo market these lifted direction accuracy 57%→63% and IC 0.27→0.33.
+- **Cross-card & relative features** — set, character, and whole-market
+  momentum (leave-one-out, so a card never sees itself), cross-sectional
+  momentum ranks, volatility-adjusted momentum, position in the recent
+  trading range, and hype-event recency (`pokeprice event --date ... --match
+  charizard`). Point estimates are seed-ensembled (3 fits averaged), and
+  `pokeprice train --tune` searches a small hyperparameter grid on an inner
+  time split. Measured on 23k held-out real-market predictions, these model
+  changes alone moved direction accuracy 56.3%→58.0% and rank IC 0.21→0.25.
 
 ## How prediction works
 
