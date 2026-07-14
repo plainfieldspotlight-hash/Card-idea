@@ -103,6 +103,56 @@ def test_buys_without_predictions(tmp_path):
     assert all(not t["items"] for t in payload["tiers"])
 
 
+def test_collection_lifecycle(client):
+    listing = client.get("/api/cards", params={"limit": 1, "min_price": 0}).json()["items"][0]
+
+    empty = client.get("/api/collection").json()
+    assert empty["holdings"] == []
+    assert empty["totals"]["count"] == 0
+
+    created = client.post("/api/collection", json={
+        "card_id": listing["card_id"], "source": listing["source"],
+        "variant": listing["variant"], "quantity": 3, "cost_basis": 1.50,
+    })
+    assert created.status_code == 201
+    holding_id = created.json()["holding_id"]
+
+    payload = client.get("/api/collection").json()
+    assert payload["totals"]["count"] == 1
+    h = payload["holdings"][0]
+    assert h["quantity"] == 3
+    assert h["price"] == listing["price"]
+    assert h["value"] == listing["price"] * 3
+    expected_gain = (listing["price"] - 1.50) * 3
+    assert abs(h["gain"] - expected_gain) < 1e-9
+    assert abs(payload["totals"]["value"] - h["value"]) < 1e-9
+
+    # unknown listing rejected
+    bad = client.post("/api/collection", json={
+        "card_id": "nope-1", "source": "tcgplayer", "variant": "normal",
+    })
+    assert bad.status_code == 404
+
+    assert client.delete(f"/api/collection/{holding_id}").status_code == 200
+    assert client.delete(f"/api/collection/{holding_id}").status_code == 404
+    assert client.get("/api/collection").json()["totals"]["count"] == 0
+
+
+def test_card_ebay_link_mode(client, monkeypatch):
+    monkeypatch.delenv("EBAY_CLIENT_ID", raising=False)
+    monkeypatch.delenv("EBAY_CLIENT_SECRET", raising=False)
+    listing = client.get("/api/cards", params={"limit": 1, "min_price": 0}).json()["items"][0]
+    payload = client.get(f"/api/cards/{listing['card_id']}/ebay",
+                         params={"variant": listing["variant"]}).json()
+    assert payload["mode"] == "link"
+    assert payload["search_url"].startswith("https://www.ebay.com/sch/")
+    assert payload["market_price"] is not None
+    assert payload["items"] == []
+
+    detail = client.get(f"/api/cards/{listing['card_id']}").json()
+    assert all(l["ebay_url"].startswith("https://www.ebay.com/sch/") for l in detail["listings"])
+
+
 def test_index_served(client):
     resp = client.get("/")
     assert resp.status_code == 200

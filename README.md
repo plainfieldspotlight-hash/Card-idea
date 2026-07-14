@@ -52,8 +52,15 @@ pokeprice fetch --github          # bulk one-shot: every card + current prices
 pokeprice fetch --sets sv8,sv9    # or targeted API pulls (see `pokeprice sets`)
 ```
 
-Run a fetch **on a schedule** (cron, Task Scheduler) so the database accumulates
-dated snapshots:
+Then keep it fresh automatically — no cron needed:
+
+```bash
+pokeprice serve --auto-fetch daily            # fetch -> train -> predict, every day
+pokeprice serve --auto-fetch 12h --auto-fetch-sets sv8,sv9   # lighter, targeted
+```
+
+The dashboard shows the auto-fetch status as a stat tile (interval, last run,
+ok/failed). Prefer external scheduling? The equivalent cron line:
 
 ```cron
 0 7 * * *  cd /path/to/Card-idea && pokeprice fetch --github && pokeprice predict
@@ -104,8 +111,21 @@ than mixing currencies on one axis.
 
 ![Card detail](docs/detail-dark.png)
 
+**My collection** — track what you own: add any listing from its card detail
+panel (quantity + what you paid), and the dashboard shows portfolio value, cost
+basis, unrealized gain, and the model's predicted 7-day move for your whole
+collection, per-holding and in total.
+
+**Buying on eBay** — every card and high-confidence pick links straight to a
+targeted eBay search (fixed-price listings). With an
+[eBay developer keyset](https://developer.ebay.com/) in `EBAY_CLIENT_ID` /
+`EBAY_CLIENT_SECRET`, the card detail panel also pulls live listings via the
+Browse API and flags each one vs your tracked market price (e.g. "-12% vs
+market"). Optional: `EBAY_MARKETPLACE` (default `EBAY_US`), `EBAY_CATEGORY_ID`.
+
 The JSON API behind it: `/api/stats`, `/api/cards`, `/api/cards/{id}`,
-`/api/movers`, `/api/buys` (interactive docs at `/docs`).
+`/api/cards/{id}/ebay`, `/api/movers`, `/api/buys`, `/api/collection`
+(interactive docs at `/docs`).
 
 ## Project layout
 
@@ -123,7 +143,7 @@ src/pokeprice/
 
 `data/` (database, models, downloads) is gitignored. Configuration via env vars:
 `POKEPRICE_DB`, `POKEPRICE_DATA_DIR`, `POKEPRICE_MIN_PRICE`, `POKEPRICE_HORIZON`,
-`POKEMONTCG_API_KEY`.
+`POKEMONTCG_API_KEY`, `EBAY_CLIENT_ID`, `EBAY_CLIENT_SECRET`, `EBAY_MARKETPLACE`.
 
 Run the tests with `pytest`.
 

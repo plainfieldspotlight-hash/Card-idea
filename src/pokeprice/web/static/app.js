@@ -69,6 +69,16 @@ function renderTiles(stats) {
       delta: run.model_kind === "gbm" ? `validation · IC ${metrics.spearman_ic?.toFixed(2) ?? "—"}` : "momentum heuristic",
     });
   }
+  if (stats.auto_fetch && stats.auto_fetch.enabled) {
+    const last = stats.auto_fetch_last;
+    tiles.push({
+      label: "Auto-fetch",
+      value: stats.auto_fetch.interval,
+      delta: last
+        ? `last run ${last.ok ? "ok" : "FAILED"} · ${fmtDate((last.finished_at || "").slice(0, 10))}`
+        : "first run pending",
+    });
+  }
   for (const t of tiles) {
     const tile = el("div", "card tile");
     tile.append(el("div", "label", t.label), el("div", "value", t.value));
@@ -138,7 +148,16 @@ function buyRow(item) {
     `${fmtMoney(item.price, item.source === "cardmarket" ? "EUR" : "USD")} · ${item.variant} · ${item.source}`));
   const stack = el("div", "m-stack");
   stack.append(el("span", `m-val delta ${deltaClass(item.predicted_return)}`, fmtPct(item.predicted_return)));
-  stack.append(el("span", "sub", `P(up) ${(item.prob_up * 100).toFixed(0)}%`));
+  const subline = el("span", "sub", `P(up) ${(item.prob_up * 100).toFixed(0)}% · `);
+  if (item.ebay_url) {
+    const a = el("a", "ebay-link", "eBay ↗");
+    a.href = item.ebay_url;
+    a.target = "_blank";
+    a.rel = "noopener";
+    a.addEventListener("click", (e) => e.stopPropagation());
+    subline.append(a);
+  }
+  stack.append(subline);
   li.append(name, stack);
   li.addEventListener("click", () => openDetail(item.card_id));
   return li;
@@ -163,6 +182,108 @@ function renderBuys(payload) {
       box.append(list);
     }
     grid.append(box);
+  }
+}
+
+/* ---------- collection ---------- */
+async function loadCollection() {
+  const payload = await getJSON("/api/collection");
+  const tiles = $("#collection-tiles");
+  tiles.replaceChildren();
+  const t = payload.totals;
+  const tileData = [
+    { label: "Portfolio value", value: t.value ? fmtMoney(t.value) : "—" },
+    { label: "Cost basis", value: t.cost ? fmtMoney(t.cost) : "—" },
+    { label: "Unrealized gain", value: fmtMoney(t.gain), cls: deltaClass(t.gain) },
+    { label: "Predicted 7d move", value: fmtMoney(t.predicted_delta), cls: deltaClass(t.predicted_delta) },
+    { label: "Holdings", value: String(t.count) },
+  ];
+  for (const td of tileData) {
+    const tile = el("div", "card tile");
+    tile.append(el("div", "label", td.label));
+    tile.append(el("div", `value delta ${td.cls || ""}`, td.value));
+    tiles.append(tile);
+  }
+  const body = $("#collection-body");
+  body.replaceChildren();
+  if (!payload.holdings.length) {
+    const tr = el("tr");
+    const td = el("td", "empty-note",
+      "Nothing here yet — click any card, then “Add to collection” on one of its listings.");
+    td.colSpan = 9;
+    tr.append(td);
+    body.append(tr);
+    return;
+  }
+  for (const h of payload.holdings) {
+    const tr = el("tr");
+    const cardTd = el("td");
+    const cell = el("div", "cell-card");
+    cell.append(thumbEl(h));
+    const n = el("div", "n");
+    const nameLine = el("div");
+    nameLine.append(el("b", null, h.name));
+    n.append(nameLine, el("span", "sub", h.set_name ?? "—"));
+    cell.append(n);
+    cardTd.append(cell);
+    const listingTd = el("td");
+    listingTd.append(el("span", "listing-chip", `${h.source} · ${h.variant}`));
+    const gainPct = h.cost_basis && h.price ? h.price / h.cost_basis - 1 : null;
+    const gainTd = el("td", `num delta ${deltaClass(h.gain)}`);
+    gainTd.textContent = h.gain === null ? "—"
+      : `${fmtMoney(h.gain, h.currency)}${gainPct !== null ? ` (${fmtPct(gainPct)})` : ""}`;
+    const removeTd = el("td", "num");
+    const btn = el("button", "btn-x", "✕");
+    btn.title = "Remove from collection";
+    btn.addEventListener("click", async (e) => {
+      e.stopPropagation();
+      await fetch(`/api/collection/${h.holding_id}`, { method: "DELETE" });
+      loadCollection();
+    });
+    removeTd.append(btn);
+    tr.append(
+      cardTd, listingTd,
+      el("td", "num", String(h.quantity)),
+      el("td", "num", h.cost_basis === null ? "—" : fmtMoney(h.cost_basis, h.currency)),
+      el("td", "num", fmtMoney(h.price, h.currency)),
+      el("td", "num", h.value === null ? "—" : fmtMoney(h.value, h.currency)),
+      gainTd,
+      el("td", `num delta ${deltaClass(h.predicted_return)}`, fmtPct(h.predicted_return)),
+      removeTd,
+    );
+    tr.addEventListener("click", () => openDetail(h.card_id));
+    body.append(tr);
+  }
+}
+
+/* ---------- eBay listings block (detail panel) ---------- */
+async function loadEbay(cardId, variant) {
+  const wrap = $("#detail-ebay");
+  wrap.replaceChildren();
+  try {
+    const payload = await getJSON(
+      `/api/cards/${encodeURIComponent(cardId)}/ebay?variant=${encodeURIComponent(variant)}`);
+    if (payload.mode !== "live" || !payload.items.length) return; // chips already link out
+    const head = el("div", "sub");
+    head.append(document.createTextNode("Live eBay listings (fixed price): "));
+    wrap.append(head);
+    const list = el("div", "ebay-items");
+    for (const it of payload.items) {
+      const row = el("a", "ebay-item");
+      row.href = it.url;
+      row.target = "_blank";
+      row.rel = "noopener";
+      row.append(el("b", null, it.price !== null ? fmtMoney(it.price, it.currency) : "—"));
+      if (it.vs_market !== null) {
+        row.append(el("span", `delta ${deltaClass(-it.vs_market)}`,
+          ` ${fmtPct(it.vs_market)} vs market`));
+      }
+      row.append(el("span", "sub", ` ${it.condition ?? ""} — ${it.title ?? ""}`));
+      list.append(row);
+    }
+    wrap.append(list);
+  } catch {
+    /* eBay block is best-effort; the search links in the chips remain */
   }
 }
 
@@ -518,8 +639,50 @@ async function openDetail(cardId) {
     } else {
       chip.append(el("div", "sub", "no prediction yet"));
     }
+
+    const actions = el("div", "chip-actions");
+    if (l.ebay_url) {
+      const a = el("a", "ebay-link", "Buy on eBay ↗");
+      a.href = l.ebay_url;
+      a.target = "_blank";
+      a.rel = "noopener";
+      actions.append(a);
+    }
+    const form = el("form", "add-form");
+    const qty = el("input");
+    qty.type = "number"; qty.min = "1"; qty.step = "1"; qty.value = "1";
+    qty.title = "Quantity";
+    const paid = el("input");
+    paid.type = "number"; paid.min = "0"; paid.step = "0.01";
+    paid.placeholder = "paid ea.";
+    paid.title = "What you paid per card (optional)";
+    const btn = el("button", null, "＋ Collection");
+    btn.type = "submit";
+    form.append(qty, paid, btn);
+    form.addEventListener("submit", async (e) => {
+      e.preventDefault();
+      btn.disabled = true;
+      try {
+        const resp = await fetch("/api/collection", {
+          method: "POST",
+          headers: { "Content-Type": "application/json" },
+          body: JSON.stringify({
+            card_id: card.card_id, source: l.source, variant: l.variant,
+            quantity: Number(qty.value) || 1,
+            cost_basis: paid.value === "" ? null : Number(paid.value),
+          }),
+        });
+        btn.textContent = resp.ok ? "Added ✓" : "Failed";
+        if (resp.ok) loadCollection();
+      } finally {
+        setTimeout(() => { btn.textContent = "＋ Collection"; btn.disabled = false; }, 1500);
+      }
+    });
+    actions.append(form);
+    chip.append(actions);
     predWrap.append(chip);
   }
+  loadEbay(cardId, listings[0]?.variant ?? "normal");
 
   // table view twin — every charted value reachable without hover
   const details = el("details");
@@ -589,7 +752,7 @@ async function init() {
     renderTiles(stats);
     renderMovers(movers);
     renderBuys(buys);
-    await loadTable();
+    await Promise.all([loadTable(), loadCollection()]);
   } catch (err) {
     $("#model-badge").textContent = "failed to load — is the server running?";
     console.error(err);

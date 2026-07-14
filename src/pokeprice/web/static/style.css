@@ -213,4 +213,43 @@ td.spark-cell { padding-top: 4px; padding-bottom: 4px; }
 .tooltip .t-row b { font-variant-numeric: tabular-nums; }
 .tooltip .t-row .t-name { color: var(--text-secondary); }
 
+/* ---- collection ---- */
+.collection-tiles { margin: 0 0 12px; }
+.collection-tiles .tile .value { font-size: 20px; }
+.btn-x {
+  font: inherit; color: var(--muted); background: none;
+  border: 1px solid var(--border); border-radius: 6px;
+  padding: 2px 8px; cursor: pointer;
+}
+.btn-x:hover { color: var(--delta-down); border-color: var(--delta-down); }
+
+/* ---- ebay & chip actions ---- */
+.ebay-link { color: var(--accent); text-decoration: none; }
+.ebay-link:hover { text-decoration: underline; }
+.chip-actions {
+  display: flex; gap: 10px; align-items: center; flex-wrap: wrap;
+  margin-top: 8px; padding-top: 8px; border-top: 1px solid var(--grid);
+}
+.add-form { display: flex; gap: 6px; align-items: center; }
+.add-form input {
+  font: inherit; font-size: 12px; color: var(--text-primary);
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 6px; width: 52px;
+}
+.add-form input[placeholder] { width: 72px; }
+.add-form button {
+  font: inherit; font-size: 12px; color: var(--text-primary);
+  background: var(--surface-1); border: 1px solid var(--border);
+  border-radius: 6px; padding: 4px 9px; cursor: pointer;
+}
+.add-form button:hover { border-color: var(--accent); color: var(--accent); }
+.detail-ebay { margin-top: 12px; }
+.ebay-items { display: flex; flex-direction: column; gap: 4px; margin-top: 6px; }
+.ebay-item {
+  color: var(--text-primary); text-decoration: none; font-size: 12px;
+  padding: 6px 8px; border: 1px solid var(--grid); border-radius: 6px;
+  overflow: hidden; text-overflow: ellipsis; white-space: nowrap;
+}
+.ebay-item:hover { border-color: var(--accent); }
+
 .foot { margin-top: 22px; text-align: center; }

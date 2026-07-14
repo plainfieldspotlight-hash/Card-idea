@@ -104,6 +104,14 @@ def cmd_serve(args) -> int:
 
     from .web.app import create_app
 
+    if args.auto_fetch and args.auto_fetch != "off":
+        from . import scheduler
+
+        sets = [s for s in (args.auto_fetch_sets or "").split(",") if s.strip()] or None
+        scheduler.start(args.auto_fetch, sets=sets)
+        scope = f"sets {','.join(sets)}" if sets else "full card dump"
+        print(f"auto-fetch enabled: {scope}, every {args.auto_fetch}"
+              " (fetch -> train -> predict)")
     uvicorn.run(create_app(), host=args.host, port=args.port, log_level="info")
     return 0
 
@@ -159,6 +167,11 @@ def main(argv=None) -> int:
     p = sub.add_parser("serve", help="launch the dashboard web app")
     p.add_argument("--host", default="127.0.0.1")
     p.add_argument("--port", type=int, default=8000)
+    p.add_argument("--auto-fetch", default=None, metavar="INTERVAL",
+                   help="keep data fresh automatically: daily, weekly, or e.g. 12h "
+                        "(runs fetch -> train -> predict on that cadence)")
+    p.add_argument("--auto-fetch-sets", default=None,
+                   help="limit auto-fetch to comma-separated set ids (default: full dump)")
     p.set_defaults(func=cmd_serve)
 
     p = sub.add_parser("stats", help="print database summary")

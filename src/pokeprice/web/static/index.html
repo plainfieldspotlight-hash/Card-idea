@@ -36,6 +36,23 @@
     <div class="buys-grid" id="buys-grid"></div>
   </section>
 
+  <section class="card panel" aria-label="My collection">
+    <h2>My collection <span class="sub">totals at face value (USD/EUR mixed) · add cards from any card's detail panel</span></h2>
+    <div class="tiles collection-tiles" id="collection-tiles"></div>
+    <div class="table-scroll">
+      <table>
+        <thead>
+          <tr>
+            <th>Card</th><th>Listing</th>
+            <th class="num">Qty</th><th class="num">Paid</th><th class="num">Price</th>
+            <th class="num">Value</th><th class="num">Gain</th><th class="num">Predicted</th><th></th>
+          </tr>
+        </thead>
+        <tbody id="collection-body"></tbody>
+      </table>
+    </div>
+  </section>
+
   <section class="card panel table-panel" aria-label="All cards">
     <div class="filters" role="search">
       <input id="search" type="search" placeholder="Search card or set…" autocomplete="off">
@@ -94,6 +111,7 @@
       <p class="sub axis-note" id="detail-axis-note"></p>
     </div>
     <div id="detail-predictions" class="detail-preds"></div>
+    <div id="detail-ebay" class="detail-ebay"></div>
   </section>
 
   <footer class="foot sub">

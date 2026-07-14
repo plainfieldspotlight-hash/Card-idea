@@ -71,7 +71,36 @@ CREATE TABLE IF NOT EXISTS predictions (
     prob_up          REAL,
     PRIMARY KEY (run_id, card_id, source, variant)
 );
+
+CREATE TABLE IF NOT EXISTS holdings (
+    holding_id INTEGER PRIMARY KEY AUTOINCREMENT,
+    card_id    TEXT NOT NULL REFERENCES cards(card_id),
+    source     TEXT NOT NULL,
+    variant    TEXT NOT NULL DEFAULT 'normal',
+    quantity   REAL NOT NULL DEFAULT 1,
+    cost_basis REAL,               -- paid per card, in the listing's currency
+    added_at   TEXT NOT NULL
+);
+
+CREATE TABLE IF NOT EXISTS meta (
+    key   TEXT PRIMARY KEY,
+    value TEXT
+);
 """
+
+
+def set_meta(conn: sqlite3.Connection, key: str, value) -> None:
+    conn.execute(
+        "INSERT INTO meta (key, value) VALUES (?, ?) "
+        "ON CONFLICT(key) DO UPDATE SET value = excluded.value",
+        (key, json.dumps(value)),
+    )
+    conn.commit()
+
+
+def get_meta(conn: sqlite3.Connection, key: str, default=None):
+    row = conn.execute("SELECT value FROM meta WHERE key = ?", (key,)).fetchone()
+    return json.loads(row["value"]) if row else default
 
 CARD_COLUMNS = (
     "card_id", "name", "supertype", "subtypes", "rarity", "set_id", "set_name",
