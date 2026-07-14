@@ -17,6 +17,7 @@ dependencies = [
     "requests>=2.31",
     "fastapi>=0.104",
     "uvicorn>=0.24",
+    "py7zr>=0.21",
 ]
 
 [project.optional-dependencies]

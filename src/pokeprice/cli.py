@@ -22,6 +22,9 @@ def cmd_fetch(args) -> int:
     if args.github:
         report = fetch.fetch_github_dump(conn)
         print(report.summary())
+        print("Note: the GitHub dump is a card CATALOG (names, sets, rarities) — "
+              "it carries no prices. Get prices with `pokeprice fetch --sets/--all` "
+              "or historical ones with `pokeprice backfill`.")
         return 0
     if not (args.sets or args.query or args.all):
         print(
@@ -109,7 +112,7 @@ def cmd_serve(args) -> int:
 
         sets = [s for s in (args.auto_fetch_sets or "").split(",") if s.strip()] or None
         scheduler.start(args.auto_fetch, sets=sets)
-        scope = f"sets {','.join(sets)}" if sets else "full card dump"
+        scope = f"sets {','.join(sets)}" if sets else "all cards via the live API"
         print(f"auto-fetch enabled: {scope}, every {args.auto_fetch}"
               " (fetch -> train -> predict)")
     uvicorn.run(create_app(), host=args.host, port=args.port, log_level="info")
@@ -119,6 +122,24 @@ def cmd_serve(args) -> int:
 def cmd_stats(args) -> int:
     conn = db.connect()
     print(json.dumps(db.stats(conn), indent=2, default=str))
+    return 0
+
+
+def cmd_backfill(args) -> int:
+    from . import backfill
+
+    conn = db.connect()
+    sets = [s for s in (args.sets or "").split(",") if s.strip()] or None
+    try:
+        result = backfill.backfill(conn, days=args.days, every=args.every,
+                                   set_ids=sets)
+    except RuntimeError as exc:
+        print(str(exc), file=sys.stderr)
+        return 1
+    print(f"Backfill complete: {result['snapshots_added']} historical snapshots "
+          f"across {result['days_processed']} day(s) "
+          f"({result['groups_matched']} sets, {result['products_matched']} products matched).")
+    print("Next: pokeprice train && pokeprice predict")
     return 0
 
 
@@ -243,10 +264,21 @@ def main(argv=None) -> int:
     p.add_argument("--sets", default=None, help="comma-separated set ids, e.g. sv8,sv9")
     p.add_argument("--query", default=None, help="raw API query, e.g. 'name:charizard'")
     p.add_argument("--github", action="store_true",
-                   help="bulk-download the pokemon-tcg-data dump instead of the API")
+                   help="bulk-download the card CATALOG from pokemon-tcg-data "
+                        "(metadata only — the dump has no prices)")
     p.add_argument("--all", action="store_true", help="crawl every card via the API")
     p.add_argument("--max-pages", type=int, default=50)
     p.set_defaults(func=cmd_fetch)
+
+    p = sub.add_parser(
+        "backfill",
+        help="import months of REAL daily TCGplayer price history from tcgcsv.com archives")
+    p.add_argument("--days", type=int, default=120, help="how far back (default %(default)s)")
+    p.add_argument("--every", type=int, default=2,
+                   help="day step between snapshots (1 = daily; default %(default)s)")
+    p.add_argument("--sets", default=None,
+                   help="restrict to comma-separated set ids (default: every set in your catalog)")
+    p.set_defaults(func=cmd_backfill)
 
     p = sub.add_parser("sets", help="list set ids available on the API")
     p.add_argument("--limit", type=int, default=40)

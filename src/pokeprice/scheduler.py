@@ -39,20 +39,18 @@ def _now() -> str:
     return datetime.now(timezone.utc).isoformat(timespec="seconds")
 
 
-def run_cycle(db_path: Path | str | None = None, use_github: bool = True,
+def run_cycle(db_path: Path | str | None = None,
               sets: list[str] | None = None, log=print) -> dict:
-    """One fetch -> train -> predict pass. Returns a status dict (also persisted)."""
+    """One fetch -> train -> predict pass. Returns a status dict (also persisted).
+
+    Prices always come from the live API (the GitHub dump carries card metadata
+    only, no prices); `sets` narrows the crawl, otherwise every card is pulled.
+    """
     conn = db.connect(db_path)
     status: dict = {"started_at": _now(), "steps": {}}
     try:
-        if sets:
-            cards, snaps = fetch.fetch_api(conn, sets=sets, progress=log)
-            status["steps"]["fetch"] = {"ok": True, "cards": cards, "snapshots": snaps}
-        elif use_github:
-            report = fetch.fetch_github_dump(conn, progress=log)
-            status["steps"]["fetch"] = {
-                "ok": True, "cards": report.cards, "snapshots": report.snapshots,
-            }
+        cards, snaps = fetch.fetch_api(conn, sets=sets, progress=log)
+        status["steps"]["fetch"] = {"ok": True, "cards": cards, "snapshots": snaps}
         try:
             metrics = model.train(conn)
             status["steps"]["train"] = {
