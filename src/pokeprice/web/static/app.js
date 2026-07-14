@@ -12,7 +12,8 @@ const $ = (sel) => document.querySelector(sel);
 const SERIES_VARS = ["--series-1", "--series-2", "--series-3", "--series-4", "--series-5", "--series-6"];
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
-const state = { page: 0, limit: 25, q: "", source: "", minPrice: 1, sort: "predicted", total: 0 };
+const state = { page: 0, limit: 25, q: "", source: "", set: "", rarity: "",
+                minPrice: 1, sort: "predicted", total: 0 };
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -58,7 +59,8 @@ function renderTiles(stats) {
   const tiles = [
     { label: "Cards tracked", value: fmtCount(stats.cards) },
     { label: "Price snapshots", value: fmtCount(stats.snapshots), delta: stats.snapshot_dates ? `${fmtCount(stats.snapshot_dates)} distinct dates` : null },
-    { label: "Listings", value: fmtCount(stats.listings), delta: "card × source × variant" },
+    { label: "Listings", value: fmtCount(stats.listings),
+      delta: "one card can trade in several markets/finishes" },
     { label: "Latest prices", value: stats.last_date ? fmtDate(stats.last_date) : "—", delta: stats.first_date ? `history since ${fmtDate(stats.first_date)}` : null },
   ];
   if (run) {
@@ -562,9 +564,13 @@ function renderTable(payload) {
   body.replaceChildren();
   if (!payload.items.length) {
     const tr = el("tr");
-    const td = el("td", "empty-note",
-      "No cards match. If the database is empty: `pokeprice demo` for a demo market, " +
-      "`pokeprice ingest pokemon.zip` for your own data, or `pokeprice fetch` for live data.");
+    const searching = state.q || state.set || state.rarity || state.source;
+    const message = searching && state.minPrice > 0
+      ? `No matches at your price floor — cheap cards are hidden by the "≥ ${state.minPrice.toFixed(2)}" filter. Try switching it to "Any price".`
+      : searching
+        ? "No cards match that search."
+        : "No cards yet — run `pokeprice demo` for a demo market, `pokeprice ingest pokemon.zip` for your own data, or `pokeprice fetch` for live data.";
+    const td = el("td", "empty-note", message);
     td.colSpan = 8;
     tr.append(td);
     body.append(tr);
@@ -607,6 +613,7 @@ function renderTable(payload) {
       predTd.append(el("span", "sub", ` ${fmtPct(item.predicted_low)}…${fmtPct(item.predicted_high)}`));
     }
     const probTd = el("td", "num", item.prob_up === null || item.prob_up === undefined ? "—" : (item.prob_up * 100).toFixed(0) + "%");
+    probTd.title = "Probability the price is higher in 7 days";
 
     tr.append(cardTd, listingTd, priceTd, chTd, sparkTd, predTd, probTd);
     const open = () => openDetail(item.card_id);
@@ -623,8 +630,8 @@ function renderTable(payload) {
 
 async function loadTable() {
   const params = new URLSearchParams({
-    q: state.q, source: state.source, sort: state.sort,
-    min_price: String(state.minPrice),
+    q: state.q, source: state.source, set_id: state.set, rarity: state.rarity,
+    sort: state.sort, min_price: String(state.minPrice),
     limit: String(state.limit), offset: String(state.page * state.limit),
   });
   const panel = $("#cards-table");
@@ -1008,9 +1015,47 @@ function debounce(fn, ms) {
   return (...args) => { clearTimeout(t); t = setTimeout(() => fn(...args), ms); };
 }
 
+async function loadFilterOptions() {
+  const payload = await getJSON("/api/sets");
+  const setSel = $("#set-filter");
+  for (const s of payload.sets) {
+    const opt = el("option", null,
+      `${s.set_name}${s.release_date ? ` (${s.release_date.slice(0, 4)})` : ""}`);
+    opt.value = s.set_id;
+    setSel.append(opt);
+  }
+  const raritySel = $("#rarity-filter");
+  for (const r of payload.rarities) {
+    const opt = el("option", null, r);
+    opt.value = r;
+    raritySel.append(opt);
+  }
+}
+
+const refreshSuggestions = debounce(async (text) => {
+  if (text.length < 2) return;
+  try {
+    const payload = await getJSON(`/api/suggest?q=${encodeURIComponent(text)}`);
+    const list = $("#card-suggest");
+    list.replaceChildren();
+    for (const name of payload.suggestions) {
+      const opt = el("option");
+      opt.value = name;
+      list.append(opt);
+    }
+  } catch { /* suggestions are best-effort */ }
+}, 200);
+
 $("#search").addEventListener("input", debounce((e) => {
   state.q = e.target.value.trim(); state.page = 0; loadTable();
+  refreshSuggestions(e.target.value.trim());
 }, 250));
+$("#set-filter").addEventListener("change", (e) => {
+  state.set = e.target.value; state.page = 0; loadTable();
+});
+$("#rarity-filter").addEventListener("change", (e) => {
+  state.rarity = e.target.value; state.page = 0; loadTable();
+});
 $("#source-filter").addEventListener("change", (e) => {
   state.source = e.target.value; state.page = 0; loadTable();
 });
@@ -1039,7 +1084,8 @@ async function init() {
     renderMovers(movers);
     renderBuys(buys);
     renderDeals(deals);
-    await Promise.all([loadTable(), loadCollection(), loadWatchAndAlerts(), loadReport()]);
+    await Promise.all([loadTable(), loadCollection(), loadWatchAndAlerts(),
+                       loadReport(), loadFilterOptions()]);
   } catch (err) {
     $("#model-badge").textContent = "failed to load — is the server running?";
     console.error(err);
