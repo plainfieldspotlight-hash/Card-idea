@@ -60,3 +60,24 @@ def test_train_reports_stale_drop(conn, tmp_path):
                           min_activity=0.2)
     assert metrics["min_activity"] == 0.2
     assert metrics["stale_rows_dropped"] > 100  # ~3 listings x ~60 eligible rows
+
+
+def test_demo_remove_keeps_real_data(tmp_path, monkeypatch):
+    from pokeprice import cli, demo as demo_mod
+
+    monkeypatch.setenv("POKEPRICE_DATA_DIR", str(tmp_path))
+    conn = db.connect(tmp_path / "pokeprice.db")
+    demo_mod.seed(conn, n_cards=10, days=10)
+    _seed_listing(conn, "real-1", [5.0 + 0.1 * i for i in range(10)])
+    conn.close()
+
+    assert cli.main(["demo", "--remove"]) == 0
+    conn = db.connect(tmp_path / "pokeprice.db")
+    remaining = {r[0] for r in conn.execute("SELECT card_id FROM cards")}
+    assert remaining == {"real-1"}
+    assert conn.execute(
+        "SELECT COUNT(*) FROM price_snapshots WHERE card_id LIKE 'demo%'"
+    ).fetchone()[0] == 0
+    assert conn.execute(
+        "SELECT COUNT(*) FROM price_snapshots WHERE card_id = 'real-1'"
+    ).fetchone()[0] == 10
