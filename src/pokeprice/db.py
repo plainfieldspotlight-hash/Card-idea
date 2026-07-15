@@ -220,8 +220,12 @@ def insert_snapshots(conn: sqlite3.Connection, snapshots: Iterable[Mapping]) -> 
 
 def stats(conn: sqlite3.Connection) -> dict:
     q = lambda sql: conn.execute(sql).fetchone()[0]  # noqa: E731
+    # predict writes one run per horizon; the headline run is the newest one
+    # at the default horizon (falling back to the newest of any horizon)
     latest_run = conn.execute(
-        "SELECT * FROM prediction_runs ORDER BY run_id DESC LIMIT 1"
+        "SELECT * FROM prediction_runs "
+        "ORDER BY (horizon_days = ?) DESC, run_id DESC LIMIT 1",
+        (config.DEFAULT_HORIZON_DAYS,),
     ).fetchone()
     return {
         "cards": q("SELECT COUNT(*) FROM cards"),

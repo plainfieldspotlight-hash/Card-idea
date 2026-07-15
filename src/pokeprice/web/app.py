@@ -33,6 +33,11 @@ class WatchIn(BaseModel):
 
 STATIC_DIR = Path(__file__).parent / "static"
 
+# Extra prediction horizons shown alongside the default one (e.g. 30d/60d
+# columns next to the 7d prediction).
+EXTRA_HORIZONS = tuple(h for h in config.HORIZONS
+                       if h != config.DEFAULT_HORIZON_DAYS)
+
 SORTS = {
     "predicted": "p.predicted_return",
     "prob": "p.prob_up",
@@ -41,6 +46,8 @@ SORTS = {
     "name": "c.name",
     "date": "l.snapshot_date",
 }
+for _h in EXTRA_HORIZONS:
+    SORTS[f"pred{_h}"] = f"p{_h}.predicted_return"
 
 # High-confidence buy tiers: (key, label, min_exclusive, max_inclusive)
 BUY_TIERS = [
@@ -70,7 +77,21 @@ def bucket_clause(bucket: str, alias: str = "c") -> str | None:
     return f"({clause})"
 
 
-LATEST_LISTINGS_CTE = """
+# The `run` CTE is pinned to the newest run at the DEFAULT horizon (predict
+# now writes one run per horizon, so "newest run overall" would silently be
+# the 60d one); a database that only has runs at other horizons falls back to
+# the newest run of any horizon. One `run{h}` CTE per extra horizon feeds the
+# 30d/60d columns.
+_RUN_CTES = ",\n".join(
+    [f"""run AS (SELECT run_id FROM prediction_runs
+     ORDER BY (horizon_days = {config.DEFAULT_HORIZON_DAYS}) DESC, run_id DESC
+     LIMIT 1)"""]
+    + [f"""run{h} AS (SELECT run_id FROM prediction_runs
+     WHERE horizon_days = {h} ORDER BY run_id DESC LIMIT 1)"""
+       for h in EXTRA_HORIZONS]
+)
+
+LATEST_LISTINGS_CTE = f"""
 WITH latest AS (
     SELECT s.*, ROW_NUMBER() OVER (
         PARTITION BY s.card_id, s.source, s.variant
@@ -79,8 +100,32 @@ WITH latest AS (
     COALESCE(s.market, s.mid, (s.low + s.high) / 2.0, s.low) AS price
     FROM price_snapshots s
 ),
-run AS (SELECT run_id FROM prediction_runs ORDER BY run_id DESC LIMIT 1)
+{_RUN_CTES}
 """
+
+# /api/cards pulls each extra horizon's predicted move as its own column
+# (predicted_30d, predicted_60d, ...).
+_HORIZON_SELECTS = "".join(
+    f",\n               p{h}.predicted_return AS predicted_{h}d"
+    for h in EXTRA_HORIZONS)
+_HORIZON_JOINS = "".join(
+    f"""
+        LEFT JOIN predictions p{h}
+               ON p{h}.run_id = (SELECT run_id FROM run{h})
+              AND p{h}.card_id = l.card_id AND p{h}.source = l.source
+              AND p{h}.variant = l.variant"""
+    for h in EXTRA_HORIZONS)
+
+
+def latest_run(c: sqlite3.Connection, horizon: int | None = None) -> sqlite3.Row | None:
+    """Newest prediction run at the requested horizon (default: the default
+    horizon), falling back to the newest run of any horizon."""
+    h = horizon or config.DEFAULT_HORIZON_DAYS
+    return c.execute(
+        "SELECT * FROM prediction_runs "
+        "ORDER BY (horizon_days = ?) DESC, run_id DESC LIMIT 1",
+        (h,),
+    ).fetchone()
 
 
 def _downsample(points: list, limit: int = 40) -> list:
@@ -212,14 +257,14 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
                   AND p2.snapshot_date <= date(l.snapshot_date, '-6 day')
                 ORDER BY p2.snapshot_date DESC LIMIT 1) AS past7,
                l.avg7,
-               p.predicted_return, p.prob_up, p.predicted_low, p.predicted_high,
+               p.predicted_return, p.prob_up, p.predicted_low, p.predicted_high{_HORIZON_SELECTS},
                (w.watch_id IS NOT NULL) AS watched,
                COUNT(*) OVER () AS total
         FROM latest l
         JOIN cards c USING (card_id)
         LEFT JOIN predictions p
                ON p.run_id = (SELECT run_id FROM run)
-              AND p.card_id = l.card_id AND p.source = l.source AND p.variant = l.variant
+              AND p.card_id = l.card_id AND p.source = l.source AND p.variant = l.variant{_HORIZON_JOINS}
         LEFT JOIN watchlist w
                ON w.card_id = l.card_id AND w.source = l.source AND w.variant = l.variant
         WHERE {' AND '.join(where)}
@@ -327,22 +372,34 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
                 })
                 if h["price"] is not None:
                     entry["history"].append([h["snapshot_date"], round(h["price"], 4)])
+            # the newest run of every horizon, so the detail panel can show
+            # 7d / 30d / 60d side by side
             preds = c.execute(
                 """
                 SELECT p.*, r.model_kind, r.horizon_days, r.as_of, r.created_at
                 FROM predictions p JOIN prediction_runs r USING (run_id)
                 WHERE p.card_id = ?
-                  AND p.run_id = (SELECT MAX(run_id) FROM prediction_runs)
+                  AND p.run_id IN (SELECT MAX(run_id) FROM prediction_runs
+                                   GROUP BY horizon_days)
+                ORDER BY r.horizon_days
                 """,
                 (card_id,),
             ).fetchall()
-            pred_map = {(p["source"], p["variant"]): dict(p) for p in preds}
+            pred_map: dict[tuple, list] = {}
+            for p in preds:
+                pred_map.setdefault((p["source"], p["variant"]), []).append(dict(p))
             out = []
             for key, entry in sorted(listings.items()):
                 entry["latest_date"], entry["latest_price"] = (
                     entry["history"][-1] if entry["history"] else (None, None)
                 )
-                entry["prediction"] = pred_map.get(key)
+                plist = pred_map.get(key, [])
+                entry["predictions"] = plist
+                # `prediction` stays the default-horizon one (max-bid calc etc.)
+                entry["prediction"] = next(
+                    (p for p in plist
+                     if p["horizon_days"] == config.DEFAULT_HORIZON_DAYS),
+                    plist[0] if plist else None)
                 entry["ebay_url"] = ebay.search_url(dict(card), entry["variant"])
                 out.append(entry)
             return {"card": dict(card), "listings": out}
@@ -429,6 +486,7 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
         max_above_market: float = -0.05,
         limit: int = Query(10, le=25),
         chase: int = 0,
+        horizon: int = 0,
     ):
         """Deal radar: model-liked cards crossed with live eBay prices.
 
@@ -438,9 +496,7 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
         """
         c = conn()
         try:
-            run = c.execute(
-                "SELECT * FROM prediction_runs ORDER BY run_id DESC LIMIT 1"
-            ).fetchone()
+            run = latest_run(c, horizon or None)
             if run is None:
                 return {"mode": "none", "deals": []}
             candidates = [dict(r) for r in c.execute(
@@ -742,12 +798,10 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
 
     @app.get("/api/movers")
     def api_movers(limit: int = Query(8, le=50), min_price: float = 1.0,
-                   chase: int = 0):
+                   chase: int = 0, horizon: int = 0):
         c = conn()
         try:
-            run = c.execute(
-                "SELECT * FROM prediction_runs ORDER BY run_id DESC LIMIT 1"
-            ).fetchone()
+            run = latest_run(c, horizon or None)
             if run is None:
                 return {"run": None, "gainers": [], "losers": []}
             chase_sql = f" AND {chase_clause('c')}" if chase else ""
@@ -778,6 +832,7 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
         per_tier: int = Query(5, le=25),
         rank: str = "worst_case",
         chase: int = 0,
+        horizon: int = 0,
     ):
         """Highest-conviction upside picks, bucketed into USD price tiers.
 
@@ -789,9 +844,7 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
         """
         c = conn()
         try:
-            run = c.execute(
-                "SELECT * FROM prediction_runs ORDER BY run_id DESC LIMIT 1"
-            ).fetchone()
+            run = latest_run(c, horizon or None)
             criteria = {"min_prob": min_prob, "min_return": min_return,
                         "per_tier": per_tier, "rank": rank}
             tiers = [

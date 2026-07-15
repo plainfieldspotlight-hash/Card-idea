@@ -41,7 +41,7 @@ def test_seed_ensemble_and_tune(conn, tmp_path):
     best_ic = max(r["ic"] for r in metrics["tune_results"])
     assert metrics["params"] == next(
         r["params"] for r in metrics["tune_results"] if r["ic"] == best_ic)
-    bundle = model.load_bundle(tmp_path / "m.joblib")
+    bundle = model.load_bundle(path=tmp_path / "m.joblib")
     assert isinstance(bundle.regressor, model._AvgReg)
     assert len(bundle.regressor.models) == len(model.ENSEMBLE_SEEDS)
     import numpy as np
@@ -56,7 +56,7 @@ def test_stale_model_falls_back(trained, monkeypatch):
     # simulate a feature-set change since training
     monkeypatch.setattr(model.features, "NUM_FEATURES",
                         model.features.NUM_FEATURES + ["brand_new_feature"])
-    assert model.load_bundle(model_file) is None
+    assert model.load_bundle(path=model_file) is None
     result = model.predict(conn, model_file=model_file)
     assert result["model_kind"] == "momentum"
 

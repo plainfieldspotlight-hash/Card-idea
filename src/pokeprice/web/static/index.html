@@ -24,11 +24,16 @@
     <summary>❓ New here? How to read this dashboard (30 seconds)</summary>
     <div class="explainer-body">
       <p><b>What this app does:</b> it tracks card prices every day, learns from how they've
-      moved before, and estimates where each card's price is heading over the next 7 days.</p>
+      moved before, and estimates where each card's price is heading over the next 7, 30, and
+      60 days.</p>
       <ul>
         <li><b>Predicted move</b> — the model's best guess, e.g. <b>+5%</b> means it expects the
         price to be about 5% higher in a week. The small range next to it ("−1% … +12%") is the
         realistic spread of outcomes — wide range = less certain.</li>
+        <li><b>Three horizons</b> — a separate model is trained for each look-ahead window.
+        The card table shows the 7d, 30d, and 60d predictions side by side, and the
+        <b>“Looking ahead”</b> chips switch the gainers / buys / deal-radar lists between
+        horizons. Longer horizons are inherently less certain.</li>
         <li><b>Chance ↑</b> — the probability the price ends <i>higher</i> in 7 days. 70%+ means
         the model is fairly confident; ~50% means it's a coin flip.</li>
         <li><b>💰 Money makers only</b> — collectors know commons/uncommons sell as bulk, so the
@@ -60,6 +65,15 @@
       💰 Money makers only
       <span class="sub">Full Art · IR · SIR · Ultra · Secret · Hyper · Holo</span>
     </button>
+    <div class="bucket-chips horizon-chips" role="group" aria-label="Prediction horizon">
+      <span class="chips-label sub">Looking ahead:</span>
+      <button type="button" data-horizon="0" class="on"
+              title="Rank gainers, buys, and deals by the 7-day model">7 days</button>
+      <button type="button" data-horizon="30"
+              title="Rank gainers, buys, and deals by the 30-day model">30 days</button>
+      <button type="button" data-horizon="60"
+              title="Rank gainers, buys, and deals by the 60-day model">60 days</button>
+    </div>
   </div>
 
   <section class="movers-wrap" aria-label="Predicted movers">
@@ -130,7 +144,9 @@
         <option value="100">≥ 100.00</option>
       </select>
       <select id="sort" aria-label="Sort by">
-        <option value="predicted">Sort: predicted move</option>
+        <option value="predicted">Sort: predicted 7d</option>
+        <option value="pred30">Sort: predicted 30d</option>
+        <option value="pred60">Sort: predicted 60d</option>
         <option value="prob">Sort: P(up)</option>
         <option value="change7">Sort: 7d change</option>
         <option value="price">Sort: price</option>
@@ -177,7 +193,9 @@
             <th class="num" title="Latest market price">Price</th>
             <th class="num" title="How much the price moved over the last ~7 days">7d change</th>
             <th class="spark-col" title="Price over the last 30 days">30d trend</th>
-            <th class="num" title="The model's expected price move over the next 7 days; the small range shows the realistic spread of outcomes">Predicted move</th>
+            <th class="num" title="The model's expected price move over the next 7 days; the small range shows the realistic spread of outcomes">Predicted 7d</th>
+            <th class="num" title="The model's expected price move over the next 30 days">Predicted 30d</th>
+            <th class="num" title="The model's expected price move over the next 60 days">Predicted 60d</th>
             <th class="num" title="Probability the price is higher in 7 days — 70%+ is confident, 50% is a coin flip">Chance ↑</th>
           </tr>
         </thead>

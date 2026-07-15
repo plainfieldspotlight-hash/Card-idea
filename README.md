@@ -133,7 +133,16 @@ Every observation of a listing (a card × source × variant series) on a snapsho
 date becomes a feature row: trailing 1/7/30-day returns, volatility, bid–ask
 spread, Cardmarket's embedded 1/7/30-day averages (momentum that works even from
 a single dump), price level, rarity, set age, and history depth. The label is
-the forward return to the snapshot ~`horizon` days later (default 7).
+the forward return to the snapshot ~`horizon` days later.
+
+**Three horizons.** A separate model is trained per look-ahead window — 7, 30,
+and 60 days by default (`POKEPRICE_HORIZONS`). `pokeprice train` trains all of
+them (`--horizon 30` for just one; horizons without enough history are skipped
+with a note), `pokeprice predict` stores one run per horizon, and the dashboard
+shows them side by side: 7d/30d/60d columns in the card table, all three in each
+card's detail panel, and a "Looking ahead" switch for the gainers/buys/deals
+lists. Action screens, alerts, and the report default to the 7-day run. Models
+live at `data/model.joblib` (7d) and `data/model-{30,60}d.joblib`.
 
 - **Model**: `HistGradientBoosting` regressor (expected return) + classifier
   (P(up)), with NaN-tolerant features and native categoricals.
@@ -159,9 +168,9 @@ truth about your data.
 **high-confidence buys** bucketed into four price tiers (over $1,000 ·
 $500–$1,000 · $100–$500 · $100 or less — listings with P(up) ≥ 70% and a
 predicted move ≥ +2%, tunable via `/api/buys?min_prob=&min_return=`), a
-searchable/sortable table (price, 7d change, 30d sparkline, predicted move,
-P(up)), and per-card detail with multi-series price history, crosshair tooltip,
-and a table view. Light and dark mode. When a card trades in both USD
+searchable/sortable table (price, 7d change, 30d sparkline, predicted 7d/30d/60d
+moves, P(up)), and per-card detail with multi-series price history, crosshair
+tooltip, and a table view. Light and dark mode. When a card trades in both USD
 (TCGplayer) and EUR (Cardmarket), the chart indexes both series to 100 rather
 than mixing currencies on one axis.
 

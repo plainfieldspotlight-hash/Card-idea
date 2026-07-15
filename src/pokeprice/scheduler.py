@@ -52,23 +52,32 @@ def run_cycle(db_path: Path | str | None = None,
     try:
         cards, snaps = fetch.fetch_api(conn, sets=sets, progress=log)
         status["steps"]["fetch"] = {"ok": True, "cards": cards, "snapshots": snaps}
-        try:
-            # money makers are the product focus: the self-updating model is
-            # the chase specialist unless POKEPRICE_CHASE=0
-            metrics = model.train(conn, chase=config.CHASE_DEFAULT)
-            status["steps"]["train"] = {
-                "ok": True,
-                "scope": metrics.get("scope"),
-                "direction_accuracy": metrics.get("direction_accuracy"),
-                "spearman_ic": metrics.get("spearman_ic"),
-            }
-        except model.InsufficientHistory as exc:
-            status["steps"]["train"] = {"ok": False, "skipped": str(exc)}
+        # money makers are the product focus: the self-updating models are
+        # chase specialists unless POKEPRICE_CHASE=0. One model per horizon;
+        # long horizons stay skipped until enough history accumulates.
+        trained = []
+        for horizon in config.HORIZONS:
+            try:
+                metrics = model.train(conn, horizon_days=horizon,
+                                      chase=config.CHASE_DEFAULT)
+                trained.append({
+                    "ok": True,
+                    "horizon_days": horizon,
+                    "scope": metrics.get("scope"),
+                    "direction_accuracy": metrics.get("direction_accuracy"),
+                    "spearman_ic": metrics.get("spearman_ic"),
+                })
+            except model.InsufficientHistory as exc:
+                trained.append({"ok": False, "horizon_days": horizon,
+                                "skipped": str(exc)})
+        status["steps"]["train"] = trained
         result = model.predict(conn)
+        runs = result["runs"] if "runs" in result else [result]
         status["steps"]["predict"] = {
             "ok": True,
-            "model_kind": result["model_kind"],
-            "listings_scored": result["listings_scored"],
+            "runs": [{"horizon_days": r["horizon_days"],
+                      "model_kind": r["model_kind"]} for r in runs],
+            "listings_scored": runs[0]["listings_scored"],
         }
         try:
             from . import pricecharting

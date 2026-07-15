@@ -73,15 +73,8 @@ def cmd_demo(args) -> int:
     return 0
 
 
-def cmd_train(args) -> int:
-    conn = db.connect()
-    try:
-        metrics = model.train(conn, horizon_days=args.horizon, tune=args.tune,
-                              min_activity=args.min_activity, chase=args.chase)
-    except model.InsufficientHistory as exc:
-        print(f"Not enough history to train yet.\n{exc}", file=sys.stderr)
-        return 1
-    print(f"Model trained ({args.horizon}-day horizon) -> {config.model_path()}")
+def _print_train_metrics(metrics: dict, horizon: int) -> None:
+    print(f"Model trained ({horizon}-day horizon) -> {config.model_path(horizon)}")
     for key in ("n_train", "n_valid", "valid_from", "mae", "baseline_mae",
                 "direction_accuracy", "spearman_ic", "stale_rows_dropped"):
         value = metrics.get(key)
@@ -96,15 +89,39 @@ def cmd_train(args) -> int:
         ic = f"{cs['spearman_ic']:.4f}" if cs.get("spearman_ic") is not None else "—"
         print(f"  on money-makers      direction {acc}, IC {ic} ({cs['n']} rows) "
               "— compare with `pokeprice train --chase`")
+
+
+def cmd_train(args) -> int:
+    conn = db.connect()
+    horizons = [args.horizon] if args.horizon else list(config.HORIZONS)
+    trained = 0
+    for horizon in horizons:
+        try:
+            metrics = model.train(conn, horizon_days=horizon, tune=args.tune,
+                                  min_activity=args.min_activity, chase=args.chase)
+        except model.InsufficientHistory as exc:
+            print(f"{horizon}-day horizon: not enough history yet — skipped.\n"
+                  f"  {exc}", file=sys.stderr)
+            continue
+        trained += 1
+        _print_train_metrics(metrics, horizon)
+    if not trained:
+        print("No horizon had enough history to train. `pokeprice predict` "
+              "still works via the momentum fallback.", file=sys.stderr)
+        return 1
     return 0
 
 
 def cmd_predict(args) -> int:
     conn = db.connect()
     result = model.predict(conn, horizon_days=args.horizon)
-    print(f"Run #{result['run_id']}: scored {result['listings_scored']} listings "
-          f"with {result['model_kind']} model "
-          f"({result['horizon_days']}-day horizon, as of {result['as_of']}).")
+    runs = result["runs"] if "runs" in result else [result]
+    for run in runs:
+        print(f"Run #{run['run_id']}: scored {run['listings_scored']} listings "
+              f"with {run['model_kind']} model "
+              f"({run['horizon_days']}-day horizon, as of {run['as_of']}).")
+    primary = next((r for r in runs
+                    if r["horizon_days"] == config.DEFAULT_HORIZON_DAYS), runs[0])
     rows = conn.execute(
         """
         SELECT p.card_id, c.name, c.set_name, p.variant, p.price, p.predicted_return
@@ -112,10 +129,10 @@ def cmd_predict(args) -> int:
         WHERE p.run_id = ? AND p.price >= ?
         ORDER BY p.predicted_return DESC LIMIT ?
         """,
-        (result["run_id"], max(config.MIN_PRICE, 1.0), args.top),
+        (primary["run_id"], max(config.MIN_PRICE, 1.0), args.top),
     ).fetchall()
     if rows:
-        print("\nTop predicted gainers:")
+        print(f"\nTop predicted gainers ({primary['horizon_days']}d):")
         for r in rows:
             print(f"  {r['predicted_return']:+7.1%}  {r['name']} "
                   f"[{r['set_name']} · {r['variant']}]  @ {r['price']:.2f}")
@@ -343,8 +360,9 @@ def main(argv=None) -> int:
     p.set_defaults(func=cmd_demo)
 
     p = sub.add_parser("train", help="train the movement model on accumulated history")
-    p.add_argument("--horizon", type=int, default=config.DEFAULT_HORIZON_DAYS,
-                   help="days ahead to predict (default %(default)s)")
+    p.add_argument("--horizon", type=int, default=None,
+                   help="train a single horizon in days (default: all of "
+                        f"{','.join(str(h) for h in config.HORIZONS)})")
     p.add_argument("--tune", action="store_true",
                    help="search a small hyperparameter grid on an inner time split first")
     p.add_argument("--min-activity", type=float, default=None,
@@ -356,7 +374,9 @@ def main(argv=None) -> int:
     p.set_defaults(func=cmd_train)
 
     p = sub.add_parser("predict", help="score every listing and store a prediction run")
-    p.add_argument("--horizon", type=int, default=None)
+    p.add_argument("--horizon", type=int, default=None,
+                   help="predict a single horizon in days (default: all of "
+                        f"{','.join(str(h) for h in config.HORIZONS)})")
     p.add_argument("--top", type=int, default=10)
     p.set_defaults(func=cmd_predict)
 

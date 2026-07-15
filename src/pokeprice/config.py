@@ -15,8 +15,21 @@ def db_path() -> Path:
     return Path(os.environ.get("POKEPRICE_DB", data_dir() / "pokeprice.db"))
 
 
-def model_path() -> Path:
-    return Path(os.environ.get("POKEPRICE_MODEL", data_dir() / "model.joblib"))
+def model_path(horizon_days: int | None = None) -> Path:
+    """Where the trained bundle for a horizon lives.
+
+    The default horizon keeps the legacy `model.joblib` name so existing
+    installs keep working; other horizons get `model-{h}d.joblib`. A
+    POKEPRICE_MODEL override names the default-horizon file and the other
+    horizons derive from it (`/x/m.joblib` -> `/x/m-30d.joblib`)."""
+    default = horizon_days is None or horizon_days == DEFAULT_HORIZON_DAYS
+    override = os.environ.get("POKEPRICE_MODEL")
+    if override:
+        p = Path(override)
+        return p if default else p.with_name(f"{p.stem}-{horizon_days}d{p.suffix}")
+    if default:
+        return data_dir() / "model.joblib"
+    return data_dir() / f"model-{horizon_days}d.joblib"
 
 
 # Cards below this price are excluded from training and ranking: percentage
@@ -25,6 +38,11 @@ MIN_PRICE = float(os.environ.get("POKEPRICE_MIN_PRICE", "0.25"))
 
 # Forward-looking window (days) that predictions cover by default.
 DEFAULT_HORIZON_DAYS = int(os.environ.get("POKEPRICE_HORIZON", "7"))
+
+# All horizons trained/predicted by default (`predict` and the auto-fetch
+# cycle produce one run per horizon; the dashboard shows them side by side).
+HORIZONS = tuple(int(h) for h in
+                 os.environ.get("POKEPRICE_HORIZONS", "7,30,60").split(","))
 
 # "Big move" threshold for the P(gain >= X) classifier.
 BIG_GAIN = float(os.environ.get("POKEPRICE_BIG_GAIN", "0.10"))

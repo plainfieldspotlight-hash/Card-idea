@@ -24,7 +24,7 @@ from email.message import EmailMessage
 
 import requests
 
-from . import db
+from . import config, db
 
 DEFAULT_SETTINGS = {
     "enabled": True,
@@ -80,14 +80,19 @@ def evaluate(conn: sqlite3.Connection) -> list[dict]:
     tracked = {(r["card_id"], r["source"], r["variant"])
                for r in conn.execute(TRACKED_SQL)}
     if tracked:
+        # signal thresholds are calibrated for the default (7d) horizon, so
+        # alerts read that run — not whichever horizon predicted last
         rows = conn.execute(
             """
             SELECT p.*, r.as_of, r.horizon_days, c.name
             FROM predictions p
             JOIN prediction_runs r USING (run_id)
             JOIN cards c USING (card_id)
-            WHERE p.run_id = (SELECT MAX(run_id) FROM prediction_runs)
-            """
+            WHERE p.run_id = (SELECT run_id FROM prediction_runs
+                              ORDER BY (horizon_days = ?) DESC, run_id DESC
+                              LIMIT 1)
+            """,
+            (config.DEFAULT_HORIZON_DAYS,),
         ).fetchall()
         for p in rows:
             key = (p["card_id"], p["source"], p["variant"])
