@@ -47,6 +47,34 @@ def is_chase(rarity) -> bool:
     text = (rarity or "").lower()
     return any(term in text for term in CHASE_TERMS)
 
+
+# Money makers are the whole product focus: the dashboard scopes to them by
+# default and the auto-fetch cycle trains the chase model. POKEPRICE_CHASE=0
+# reverts to the everything model.
+CHASE_DEFAULT = os.environ.get("POKEPRICE_CHASE", "1") == "1"
+
+# Matt's taxonomy as one-click buckets. Each bucket matches rarities containing
+# any `any` term and none of the `none` terms (IR must not swallow SIR).
+CHASE_BUCKETS = {
+    "full-art": {"label": "Full Art / Ultra", "any": ("ultra", "full art"), "none": ()},
+    "ir": {"label": "IR", "any": ("illustration",), "none": ("special",)},
+    "sir": {"label": "SIR", "any": ("special illustration",), "none": ()},
+    "secret": {"label": "Secret / Hyper", "any": ("secret", "hyper", "rainbow", "gold"),
+               "none": ()},
+    "holo": {"label": "Holos", "any": ("holo",), "none": ()},
+    "shiny": {"label": "Shiny / Radiant", "any": ("shiny", "amazing", "radiant"),
+              "none": ()},
+}
+
+
+def in_bucket(rarity, bucket: str) -> bool:
+    spec = CHASE_BUCKETS.get(bucket)
+    if spec is None:
+        return True
+    text = (rarity or "").lower()
+    return (any(t in text for t in spec["any"])
+            and not any(t in text for t in spec["none"]))
+
 TCG_API_BASE = os.environ.get("POKEPRICE_API_BASE", "https://api.pokemontcg.io/v2")
 TCG_API_KEY_ENV = "POKEMONTCG_API_KEY"
 

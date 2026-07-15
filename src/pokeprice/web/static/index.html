@@ -31,9 +31,10 @@
         realistic spread of outcomes — wide range = less certain.</li>
         <li><b>Chance ↑</b> — the probability the price ends <i>higher</i> in 7 days. 70%+ means
         the model is fairly confident; ~50% means it's a coin flip.</li>
-        <li><b>💰 Money makers only</b> — collectors know commons/uncommons sell as bulk; this
-        toggle narrows everything to the chase rarities that actually trade: Full Arts,
-        Illustration Rares (IR/SIR), Ultra/Secret/Hyper Rares, and Holos.</li>
+        <li><b>💰 Money makers only</b> — collectors know commons/uncommons sell as bulk, so the
+        dashboard focuses on the chase rarities that actually trade <b>by default</b>: Full Arts,
+        Illustration Rares (IR/SIR), Ultra/Secret/Hyper Rares, and Holos. The tier chips above the
+        card table jump straight to one tier; flip the 💰 button off if you ever want bulk back.</li>
         <li><b>High-confidence buys</b> — cards where the model is confident <i>and</i> even its
         cautious estimate is positive, grouped by price bracket.</li>
         <li><b>Deal radar</b> — those same promising cards, with links to buy them on eBay.</li>
@@ -131,6 +132,15 @@
         <option value="price">Sort: price</option>
         <option value="name">Sort: name</option>
       </select>
+    </div>
+    <div class="bucket-chips" role="group" aria-label="Rarity tier">
+      <button type="button" data-bucket="" class="on" title="Every money-maker rarity">All tiers</button>
+      <button type="button" data-bucket="full-art" title="Full Art and Ultra Rares">Full Art / Ultra</button>
+      <button type="button" data-bucket="ir" title="Illustration Rares">IR</button>
+      <button type="button" data-bucket="sir" title="Special Illustration Rares">SIR</button>
+      <button type="button" data-bucket="secret" title="Secret, Hyper, Rainbow, and Gold Rares">Secret / Hyper</button>
+      <button type="button" data-bucket="holo" title="All Holo tiers (V, VMAX, VSTAR, Trainer Gallery)">Holos</button>
+      <button type="button" data-bucket="shiny" title="Shiny, Amazing, and Radiant Rares">Shiny / Radiant</button>
     </div>
     <div class="table-scroll">
       <table id="cards-table">

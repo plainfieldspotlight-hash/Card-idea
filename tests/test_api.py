@@ -216,3 +216,15 @@ def test_index_served(client):
     resp = client.get("/")
     assert resp.status_code == 200
     assert "pokeprice" in resp.text
+
+
+def test_bucket_filter(client):
+    holo = client.get("/api/cards", params={"min_price": 0, "bucket": "holo",
+                                            "limit": 100}).json()
+    assert holo["total"] > 0
+    assert all("Holo" in item["rarity"] for item in holo["items"])
+    fullart = client.get("/api/cards", params={"min_price": 0, "bucket": "full-art",
+                                               "limit": 100}).json()
+    assert all("Ultra" in item["rarity"] for item in fullart["items"])
+    assert client.get("/api/cards", params={"min_price": 0, "bucket": "nonsense",
+                                            "limit": 5}).json()["total"] > 0

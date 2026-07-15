@@ -52,9 +52,12 @@ def run_cycle(db_path: Path | str | None = None,
         cards, snaps = fetch.fetch_api(conn, sets=sets, progress=log)
         status["steps"]["fetch"] = {"ok": True, "cards": cards, "snapshots": snaps}
         try:
-            metrics = model.train(conn)
+            # money makers are the product focus: the self-updating model is
+            # the chase specialist unless POKEPRICE_CHASE=0
+            metrics = model.train(conn, chase=config.CHASE_DEFAULT)
             status["steps"]["train"] = {
                 "ok": True,
+                "scope": metrics.get("scope"),
                 "direction_accuracy": metrics.get("direction_accuracy"),
                 "spearman_ic": metrics.get("spearman_ic"),
             }
