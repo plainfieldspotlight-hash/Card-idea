@@ -117,6 +117,8 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
     def api_cards(
         q: str = "",
         source: str = "",
+        set_id: str = "",
+        rarity: str = "",
         sort: str = "predicted",
         direction: str = "desc",
         min_price: float = 0.0,
@@ -128,12 +130,26 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
         where, params = ["l.rn = 1", "l.price >= :min_price"], {
             "min_price": min_price, "limit": limit, "offset": offset,
         }
-        if q:
-            where.append("(c.name LIKE :q OR c.set_name LIKE :q OR c.card_id LIKE :q)")
-            params["q"] = f"%{q}%"
+        # every word in the query must match somewhere: name, set, rarity,
+        # finish/variant, marketplace, collector number, or id — so
+        # "charizard holo 4" or "pikachu reverse" narrows as you type
+        for i, token in enumerate(q.split()[:6]):
+            where.append(
+                f"(c.name LIKE :q{i} OR c.set_name LIKE :q{i} OR c.rarity LIKE :q{i} "
+                f"OR l.variant LIKE :q{i} OR l.source LIKE :q{i} "
+                f"OR c.number = :qn{i} OR c.card_id LIKE :q{i})"
+            )
+            params[f"q{i}"] = f"%{token}%"
+            params[f"qn{i}"] = token
         if source:
             where.append("l.source = :source")
             params["source"] = source
+        if set_id:
+            where.append("c.set_id = :set_id")
+            params["set_id"] = set_id
+        if rarity:
+            where.append("c.rarity = :rarity")
+            params["rarity"] = rarity
         sql = f"""
         {LATEST_LISTINGS_CTE}
         SELECT c.card_id, c.name, c.set_name, c.rarity, c.image_small,
@@ -190,6 +206,47 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
                 r["spark"] = _downsample(sparks[key], 40)
                 items.append(r)
             return {"total": total, "items": items}
+        finally:
+            c.close()
+
+    @app.get("/api/sets")
+    def api_sets():
+        """Filter options: every set (newest first) and every rarity in the catalog."""
+        c = conn()
+        try:
+            sets = [dict(r) for r in c.execute(
+                """
+                SELECT set_id, set_name, COUNT(*) AS cards,
+                       MAX(set_release_date) AS release_date
+                FROM cards WHERE set_id IS NOT NULL
+                GROUP BY set_id, set_name
+                ORDER BY release_date DESC, set_name
+                """
+            ).fetchall()]
+            rarities = [r["rarity"] for r in c.execute(
+                "SELECT DISTINCT rarity FROM cards WHERE rarity IS NOT NULL ORDER BY rarity"
+            ).fetchall()]
+            return {"sets": sets, "rarities": rarities}
+        finally:
+            c.close()
+
+    @app.get("/api/suggest")
+    def api_suggest(q: str = "", limit: int = Query(8, le=20)):
+        """Autocomplete for the search box (prefix matches first)."""
+        if len(q.strip()) < 2:
+            return {"suggestions": []}
+        c = conn()
+        try:
+            rows = c.execute(
+                """
+                SELECT DISTINCT name FROM cards
+                WHERE name LIKE :any
+                ORDER BY CASE WHEN name LIKE :prefix THEN 0 ELSE 1 END, name
+                LIMIT :lim
+                """,
+                {"any": f"%{q.strip()}%", "prefix": f"{q.strip()}%", "lim": limit},
+            ).fetchall()
+            return {"suggestions": [r["name"] for r in rows]}
         finally:
             c.close()
 

@@ -38,6 +38,40 @@ def test_cards_list_search_and_pagination(client):
     assert empty == {"total": 0, "items": []}
 
 
+def test_search_multi_word_and_filters(client):
+    listing = client.get("/api/cards", params={"limit": 1, "min_price": 0}).json()["items"][0]
+    name_word = listing["name"].split()[0]
+
+    # multi-word: name word + rarity word must both match the same card
+    both = client.get("/api/cards", params={
+        "q": f"{name_word} {listing['rarity'].split()[0]}", "min_price": 0}).json()
+    assert both["total"] >= 1
+    assert all(name_word.lower() in i["name"].lower() for i in both["items"])
+
+    # a nonsense second word kills the match
+    none = client.get("/api/cards", params={
+        "q": f"{name_word} zzzznope", "min_price": 0}).json()
+    assert none["total"] == 0
+
+    # rarity filter
+    rare = client.get("/api/cards", params={
+        "rarity": listing["rarity"], "min_price": 0}).json()
+    assert rare["total"] >= 1
+    assert all(i["rarity"] == listing["rarity"] for i in rare["items"])
+
+    # sets endpoint feeds the set filter, and filtering by set works
+    sets = client.get("/api/sets").json()
+    assert sets["sets"] and sets["rarities"]
+    set_id = sets["sets"][0]["set_id"]
+    in_set = client.get("/api/cards", params={"set_id": set_id, "min_price": 0}).json()
+    assert in_set["total"] >= 1
+
+    # autocomplete: prefix match first, short queries return nothing
+    sug = client.get("/api/suggest", params={"q": name_word[:4]}).json()["suggestions"]
+    assert any(s.lower().startswith(name_word[:4].lower()) for s in sug)
+    assert client.get("/api/suggest", params={"q": "x"}).json()["suggestions"] == []
+
+
 def test_card_detail_and_404(client):
     listing = client.get("/api/cards", params={"limit": 1, "min_price": 0}).json()["items"][0]
     detail = client.get(f"/api/cards/{listing['card_id']}").json()

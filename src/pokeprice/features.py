@@ -36,6 +36,7 @@ NUM_FEATURES = [
     "ret_30d_rank",
     "mom_vol_adj",      # risk-adjusted momentum: ret_7d / volatility
     "range_pos",        # where price sits in its recent min..max range (0 = low, 1 = high)
+    "activity",         # fraction of past snapshots where the price actually changed
 ]
 CAT_FEATURES = ["rarity", "supertype", "source", "variant"]
 ALL_FEATURES = NUM_FEATURES + CAT_FEATURES
@@ -121,6 +122,14 @@ def add_features(df: pd.DataFrame, events: list[dict] | None = None) -> pd.DataF
         .transform(lambda s: s.rolling(8, min_periods=3).std())
     )
     df["n_hist"] = grouped.cumcount()
+
+    # Liquidity proxy: of the transitions seen so far, how many moved the price?
+    # Stale vintage listings sit at ~0; actively traded cards near 1. Trailing
+    # only (uses transitions up to the row itself), so it is leakage-safe.
+    diffs = grouped["price"].diff()
+    changed = (diffs.notna() & (diffs != 0)).astype("float64")
+    cum_changes = changed.groupby([df[k] for k in GROUP_KEYS], sort=False).cumsum()
+    df["activity"] = np.where(df["n_hist"] > 0, cum_changes / df["n_hist"], np.nan)
 
     df["spread"] = np.where(
         df["price"] > 0, (df["high"] - df["low"]) / df["price"], np.nan

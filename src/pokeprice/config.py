@@ -29,6 +29,11 @@ DEFAULT_HORIZON_DAYS = int(os.environ.get("POKEPRICE_HORIZON", "7"))
 # "Big move" threshold for the P(gain >= X) classifier.
 BIG_GAIN = float(os.environ.get("POKEPRICE_BIG_GAIN", "0.10"))
 
+# Stale-listing filter: training drops observations of listings whose price
+# changed in fewer than this fraction of their snapshots so far (once there is
+# enough history to judge). Dead vintage listings are noise, not signal.
+MIN_ACTIVITY = float(os.environ.get("POKEPRICE_MIN_ACTIVITY", "0.2"))
+
 TCG_API_BASE = os.environ.get("POKEPRICE_API_BASE", "https://api.pokemontcg.io/v2")
 TCG_API_KEY_ENV = "POKEMONTCG_API_KEY"
 
