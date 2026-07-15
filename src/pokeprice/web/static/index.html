@@ -40,6 +40,10 @@
         <li><b>Deal radar</b> — those same promising cards, with links to buy them on eBay.</li>
         <li><b>Watchlist &amp; alerts</b> — star ☆ any card and you'll get an alert when the model
         turns bullish on it or its price swings hard.</li>
+        <li><b>Condition filters</b> — a PSA 10 is a different asset than the same card raw.
+        Graded copies (from PriceCharting, when configured) appear as their own listings with
+        their own prices and predictions; filter Raw vs Graded, then by company (PSA/BGS/CGC/SGC)
+        and grade.</li>
         <li><b>My collection</b> — log cards you own to see your total value, profit, and what
         the model expects your collection to do this week.</li>
         <li><b>Model report card</b> — the honesty section: every past prediction is graded
@@ -141,6 +145,27 @@
       <button type="button" data-bucket="secret" title="Secret, Hyper, Rainbow, and Gold Rares">Secret / Hyper</button>
       <button type="button" data-bucket="holo" title="All Holo tiers (V, VMAX, VSTAR, Trainer Gallery)">Holos</button>
       <button type="button" data-bucket="shiny" title="Shiny, Amazing, and Radiant Rares">Shiny / Radiant</button>
+    </div>
+    <div class="bucket-chips condition-chips" role="group" aria-label="Condition">
+      <span class="chips-label sub">Condition:</span>
+      <button type="button" data-grading="" class="on" title="Raw and graded copies together">All</button>
+      <button type="button" data-grading="raw" title="Ungraded copies only">Raw</button>
+      <button type="button" data-grading="graded" title="Professionally graded copies (PSA, BGS, CGC, SGC)">Graded</button>
+      <select id="grade-company" class="hidden" aria-label="Grading company" title="Which grading company">
+        <option value="">Any company</option>
+        <option value="PSA">PSA</option>
+        <option value="BGS">BGS</option>
+        <option value="CGC">CGC</option>
+        <option value="SGC">SGC</option>
+      </select>
+      <select id="grade-level" class="hidden" aria-label="Grade" title="Which grade">
+        <option value="">Any grade</option>
+        <option value="10">10</option>
+        <option value="9.5">9.5</option>
+        <option value="9">9</option>
+        <option value="8">8</option>
+        <option value="7">7</option>
+      </select>
     </div>
     <div class="table-scroll">
       <table id="cards-table">

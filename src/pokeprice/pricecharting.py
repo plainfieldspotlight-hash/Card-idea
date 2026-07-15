@@ -33,6 +33,8 @@ GRADE_FIELDS = {
     "box-only-price": "grade95",
     "manual-only-price": "psa10",
     "bgs-10-price": "bgs10",
+    "condition-17-price": "cgc10",
+    "condition-18-price": "sgc10",
 }
 
 

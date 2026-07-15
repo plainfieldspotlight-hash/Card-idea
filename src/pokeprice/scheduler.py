@@ -10,6 +10,7 @@ from __future__ import annotations
 
 import re
 import threading
+import time
 import traceback
 from datetime import datetime, timedelta, timezone
 from pathlib import Path
@@ -69,6 +70,28 @@ def run_cycle(db_path: Path | str | None = None,
             "model_kind": result["model_kind"],
             "listings_scored": result["listings_scored"],
         }
+        try:
+            from . import pricecharting
+
+            if pricecharting.token():
+                tracked = [r["card_id"] for r in conn.execute(
+                    "SELECT DISTINCT card_id FROM watchlist "
+                    "UNION SELECT DISTINCT card_id FROM holdings")]
+                graded_stored = 0
+                for card_id in tracked:
+                    try:
+                        graded_stored += pricecharting.fetch_graded(
+                            conn, card_id)["snapshots"]
+                    except Exception:
+                        continue
+                    time.sleep(0.5)
+                if tracked:
+                    status["steps"]["graded"] = {
+                        "ok": True, "cards": len(tracked),
+                        "snapshots": graded_stored,
+                    }
+        except Exception as exc:
+            status["steps"]["graded"] = {"ok": False, "error": str(exc)}
         try:
             from . import alerts
 

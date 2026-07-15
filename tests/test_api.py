@@ -228,3 +228,48 @@ def test_bucket_filter(client):
     assert all("Ultra" in item["rarity"] for item in fullart["items"])
     assert client.get("/api/cards", params={"min_price": 0, "bucket": "nonsense",
                                             "limit": 5}).json()["total"] > 0
+
+
+def test_condition_filters_graded_vs_raw(tmp_path):
+    db_path = tmp_path / "graded.db"
+    conn = db.connect(db_path)
+    demo.seed(conn, n_cards=8, days=20)
+    ids = [r["card_id"] for r in conn.execute("SELECT card_id FROM cards LIMIT 2")]
+    # plant graded listings the way the PriceCharting fetch would
+    db.insert_snapshots(conn, [
+        {"card_id": ids[0], "source": "pricecharting", "variant": "psa10",
+         "snapshot_date": "2026-07-14", "currency": "USD", "market": 500.0},
+        {"card_id": ids[0], "source": "pricecharting", "variant": "grade9",
+         "snapshot_date": "2026-07-14", "currency": "USD", "market": 120.0},
+        {"card_id": ids[1], "source": "pricecharting", "variant": "bgs10",
+         "snapshot_date": "2026-07-14", "currency": "USD", "market": 800.0},
+    ])
+    conn.close()
+    graded_client = TestClient(create_app(db_path=db_path))
+
+    stats = graded_client.get("/api/stats").json()
+    assert stats["graded_listings"] == 3
+
+    graded = graded_client.get("/api/cards", params={"min_price": 0,
+                                                     "grading": "graded"}).json()
+    assert graded["total"] == 3
+    assert {i["variant"] for i in graded["items"]} == {"psa10", "grade9", "bgs10"}
+
+    psa = graded_client.get("/api/cards", params={
+        "min_price": 0, "grading": "graded", "company": "PSA"}).json()
+    assert {i["variant"] for i in psa["items"]} == {"psa10"}
+
+    tens = graded_client.get("/api/cards", params={
+        "min_price": 0, "grading": "graded", "grade": "10"}).json()
+    assert {i["variant"] for i in tens["items"]} == {"psa10", "bgs10"}
+
+    nine_any = graded_client.get("/api/cards", params={
+        "min_price": 0, "grading": "graded", "grade": "9"}).json()
+    assert {i["variant"] for i in nine_any["items"]} == {"grade9"}
+
+    raw = graded_client.get("/api/cards", params={"min_price": 0,
+                                                  "grading": "raw", "limit": 200}).json()
+    assert raw["total"] > 0
+    assert all(i["variant"] not in {"psa10", "grade9", "bgs10"} for i in raw["items"])
+    both = graded_client.get("/api/cards", params={"min_price": 0, "limit": 200}).json()
+    assert both["total"] == raw["total"] + graded["total"]

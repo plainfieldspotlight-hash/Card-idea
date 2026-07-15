@@ -243,16 +243,44 @@ def cmd_graded(args) -> int:
     from . import pricecharting
 
     conn = db.connect()
-    try:
-        result = pricecharting.fetch_graded(conn, args.card_id, query=args.query)
-    except RuntimeError as exc:
-        print(str(exc), file=sys.stderr)
-        return 1
-    if not result["matched"]:
-        print(f"No PriceCharting product matched query {result['query']!r}.")
-        return 1
-    print(f"Matched {result['matched']!r}: stored {result['snapshots']} graded "
-          f"price point(s) under source=pricecharting.")
+    targets: list[str] = []
+    if args.card_id:
+        targets.append(args.card_id)
+    if args.watchlist:
+        targets += [r["card_id"] for r in conn.execute(
+            "SELECT DISTINCT card_id FROM watchlist")]
+    if args.collection:
+        targets += [r["card_id"] for r in conn.execute(
+            "SELECT DISTINCT card_id FROM holdings")]
+    if args.set:
+        targets += [r["card_id"] for r in conn.execute(
+            "SELECT card_id FROM cards WHERE set_id = ?", (args.set,))]
+    targets = list(dict.fromkeys(targets))
+    if not targets:
+        print("Nothing to fetch — pass a card id, or --watchlist / --collection "
+              "/ --set <id>.", file=sys.stderr)
+        return 2
+    matched = missed = stored = 0
+    for i, card_id in enumerate(targets):
+        try:
+            result = pricecharting.fetch_graded(conn, card_id, query=args.query)
+        except RuntimeError as exc:
+            print(str(exc), file=sys.stderr)
+            return 1
+        if result["matched"]:
+            matched += 1
+            stored += result["snapshots"]
+        else:
+            missed += 1
+        if (i + 1) % 10 == 0 or i == len(targets) - 1:
+            print(f"  {i + 1}/{len(targets)} cards "
+                  f"({matched} matched, {stored} graded prices stored)")
+        import time
+        time.sleep(0.5)  # be polite to PriceCharting
+    if missed:
+        print(f"{missed} card(s) had no PriceCharting match.")
+    print("Graded copies now appear under the Condition filter "
+          "(Graded -> company -> grade) and get their own predictions.")
     return 0
 
 
@@ -367,10 +395,16 @@ def main(argv=None) -> int:
     p.add_argument("path")
     p.set_defaults(func=cmd_import_collection)
 
-    p = sub.add_parser("graded", help="fetch graded (PSA/BGS/CGC) prices via PriceCharting")
-    p.add_argument("card_id")
+    p = sub.add_parser("graded",
+                       help="fetch graded (PSA/BGS/CGC/SGC) prices via PriceCharting")
+    p.add_argument("card_id", nargs="?", default=None)
+    p.add_argument("--watchlist", action="store_true",
+                   help="fetch graded prices for every watched card")
+    p.add_argument("--collection", action="store_true",
+                   help="fetch graded prices for every card you own")
+    p.add_argument("--set", default=None, help="fetch for every card in a set id")
     p.add_argument("--query", default=None,
-                   help="override the search query (default: name + set + number)")
+                   help="override the search query (single-card mode only)")
     p.set_defaults(func=cmd_graded)
 
     p = sub.add_parser("event", help="record a hype event (reprint news, tournament result)")

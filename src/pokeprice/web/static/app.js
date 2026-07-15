@@ -12,8 +12,18 @@ const $ = (sel) => document.querySelector(sel);
 const SERIES_VARS = ["--series-1", "--series-2", "--series-3", "--series-4", "--series-5", "--series-6"];
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
+const VARIANT_LABELS = {
+  psa10: "PSA 10", psa9: "PSA 9", bgs10: "BGS 10", bgs95: "BGS 9.5",
+  cgc10: "CGC 10", sgc10: "SGC 10", grade95: "Grade 9.5", grade9: "Grade 9",
+  grade8: "Grade 8", grade7: "Grade 7", ungraded: "raw",
+  reverseHolofoil: "reverse holo", holofoil: "holo",
+  "1stEditionHolofoil": "1st ed. holo", "1stEditionNormal": "1st edition",
+};
+const fmtVariant = (v) => VARIANT_LABELS[v] ?? v;
+
 const state = { page: 0, limit: 25, q: "", source: "", set: "", rarity: "",
-                bucket: "", minPrice: 1, sort: "predicted", total: 0,
+                bucket: "", grading: "", company: "", grade: "",
+                minPrice: 1, sort: "predicted", total: 0,
                 // money makers are the default focus; "0" is the explicit opt-out
                 chase: localStorage.getItem("pokeprice-chase") !== "0" };
 
@@ -111,7 +121,7 @@ function moverRow(item) {
   const name = el("div", "m-name");
   const title = el("div");
   title.append(el("b", null, item.name));
-  name.append(title, el("span", "sub", `${item.set_name ?? ""} · ${item.variant} · ${item.source}`));
+  name.append(title, el("span", "sub", `${item.set_name ?? ""} · ${fmtVariant(item.variant)} · ${item.source}`));
   const price = el("span", "m-price", fmtMoney(item.price, item.source === "cardmarket" ? "EUR" : "USD"));
   const val = el("span", `m-val delta ${deltaClass(item.predicted_return)}`, fmtPct(item.predicted_return));
   li.append(name, price, val);
@@ -152,7 +162,7 @@ function buyRow(item) {
   const title = el("div");
   title.append(el("b", null, item.name));
   name.append(title, el("span", "sub",
-    `${item.set_name ?? "—"} · ${fmtMoney(item.price, item.source === "cardmarket" ? "EUR" : "USD")} · ${item.variant}`));
+    `${item.set_name ?? "—"} · ${fmtMoney(item.price, item.source === "cardmarket" ? "EUR" : "USD")} · ${fmtVariant(item.variant)}`));
   const stack = el("div", "m-stack");
   const val = el("span", `m-val delta ${deltaClass(item.predicted_return)}`, fmtPct(item.predicted_return));
   if (item.predicted_low !== null && item.predicted_low !== undefined) {
@@ -242,7 +252,7 @@ function dealRow(deal) {
     const title = el("div");
     title.append(el("b", null, deal.name));
     name.append(title, el("span", "sub",
-      `${deal.set_name ?? ""} · ${deal.variant} · tracked ${fmtMoney(deal.price, deal.currency)}`));
+      `${deal.set_name ?? ""} · ${fmtVariant(deal.variant)} · tracked ${fmtMoney(deal.price, deal.currency)}`));
     const stack = el("div", "m-stack");
     stack.append(el("span", `m-val delta ${deltaClass(deal.predicted_return)}`,
       fmtPct(deal.predicted_return)));
@@ -300,7 +310,7 @@ async function loadWatchAndAlerts() {
     const name = el("div", "m-name");
     const title = el("div");
     title.append(el("b", null, item.name));
-    name.append(title, el("span", "sub", `${item.set_name ?? ""} · ${item.variant} · ${item.source}`));
+    name.append(title, el("span", "sub", `${item.set_name ?? ""} · ${fmtVariant(item.variant)} · ${item.source}`));
     const stack = el("div", "m-stack");
     stack.append(el("span", `m-val delta ${deltaClass(item.predicted_return)}`, fmtPct(item.predicted_return)));
     stack.append(el("span", "sub", fmtMoney(item.price, item.currency)));
@@ -491,7 +501,7 @@ async function loadCollection() {
     cell.append(n);
     cardTd.append(cell);
     const listingTd = el("td");
-    listingTd.append(el("span", "listing-chip", `${h.source} · ${h.variant}`));
+    listingTd.append(el("span", "listing-chip", `${h.source} · ${fmtVariant(h.variant)}`));
     const gainPct = h.cost_basis && h.price ? h.price / h.cost_basis - 1 : null;
     const gainTd = el("td", `num delta ${deltaClass(h.gain)}`);
     gainTd.textContent = h.gain === null ? "—"
@@ -588,8 +598,10 @@ function renderTable(payload) {
   body.replaceChildren();
   if (!payload.items.length) {
     const tr = el("tr");
-    const searching = state.q || state.set || state.rarity || state.source;
-    const message = searching && state.minPrice > 0
+    const searching = state.q || state.set || state.rarity || state.source || state.bucket;
+    const message = state.grading === "graded"
+      ? "No graded prices stored yet. Graded data comes from PriceCharting (set PRICECHARTING_TOKEN, see README), then run: python -m pokeprice graded --watchlist --collection"
+      : searching && state.minPrice > 0
       ? `No matches at your price floor — cheap cards are hidden by the "≥ ${state.minPrice.toFixed(2)}" filter. Try switching it to "Any price".`
       : searching
         ? "No cards match that search."
@@ -624,7 +636,7 @@ function renderTable(payload) {
     cardTd.append(cell);
 
     const listingTd = el("td");
-    listingTd.append(el("span", "listing-chip", `${item.source} · ${item.variant}`));
+    listingTd.append(el("span", "listing-chip", `${item.source} · ${fmtVariant(item.variant)}`));
 
     const priceTd = el("td", "num", fmtMoney(item.price, item.currency));
     const chTd = el("td", `num delta ${deltaClass(item.change7)}`, fmtPct(item.change7));
@@ -656,6 +668,7 @@ async function loadTable() {
   const params = new URLSearchParams({
     q: state.q, source: state.source, set_id: state.set, rarity: state.rarity,
     chase: state.chase ? "1" : "0", bucket: state.bucket,
+    grading: state.grading, company: state.company, grade: state.grade,
     sort: state.sort, min_price: String(state.minPrice),
     limit: String(state.limit), offset: String(state.page * state.limit),
   });
@@ -883,7 +896,7 @@ async function openDetail(cardId) {
   const currencies = new Set(listings.map((l) => l.currency || "?"));
   const indexed = currencies.size > 1;
   const series = listings.map((l, i) => ({
-    name: `${l.source} · ${l.variant}`,
+    name: `${l.source} · ${fmtVariant(l.variant)}`,
     color: cssVar(SERIES_VARS[i]),
     currency: l.currency,
     points: l.history,
@@ -911,7 +924,7 @@ async function openDetail(cardId) {
   for (const l of data.listings) {
     const chip = el("div", "pred-chip");
     const title = el("div");
-    title.append(el("b", null, `${l.source} · ${l.variant}`));
+    title.append(el("b", null, `${l.source} · ${fmtVariant(l.variant)}`));
     chip.append(title);
     chip.append(el("div", null, `latest ${fmtMoney(l.latest_price, l.currency)} on ${l.latest_date ?? "—"}`));
     if (l.prediction) {
@@ -1075,14 +1088,37 @@ $("#search").addEventListener("input", debounce((e) => {
   state.q = e.target.value.trim(); state.page = 0; loadTable();
   refreshSuggestions(e.target.value.trim());
 }, 250));
-document.querySelectorAll(".bucket-chips button").forEach((chip) => {
+document.querySelectorAll(".bucket-chips button[data-bucket]").forEach((chip) => {
   chip.addEventListener("click", () => {
     state.bucket = chip.dataset.bucket;
     state.page = 0;
-    document.querySelectorAll(".bucket-chips button").forEach((b) =>
+    document.querySelectorAll(".bucket-chips button[data-bucket]").forEach((b) =>
       b.classList.toggle("on", b === chip));
     loadTable();
   });
+});
+
+document.querySelectorAll(".condition-chips button[data-grading]").forEach((chip) => {
+  chip.addEventListener("click", () => {
+    state.grading = chip.dataset.grading;
+    state.page = 0;
+    document.querySelectorAll(".condition-chips button[data-grading]").forEach((b) =>
+      b.classList.toggle("on", b === chip));
+    const graded = state.grading === "graded";
+    $("#grade-company").classList.toggle("hidden", !graded);
+    $("#grade-level").classList.toggle("hidden", !graded);
+    if (!graded) {
+      state.company = ""; state.grade = "";
+      $("#grade-company").value = ""; $("#grade-level").value = "";
+    }
+    loadTable();
+  });
+});
+$("#grade-company").addEventListener("change", (e) => {
+  state.company = e.target.value; state.page = 0; loadTable();
+});
+$("#grade-level").addEventListener("change", (e) => {
+  state.grade = e.target.value; state.page = 0; loadTable();
 });
 
 $("#set-filter").addEventListener("change", (e) => {
