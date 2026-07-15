@@ -190,10 +190,15 @@ case predicted sale minus your fee % and shipping = the most you can pay and
 still expect profit) and, where the approval-gated Marketplace Insights API is
 available, recent **sold comps**. Optional: `EBAY_MARKETPLACE`, `EBAY_CATEGORY_ID`.
 
-**Graded cards** — with a [PriceCharting](https://www.pricecharting.com/api-documentation)
-token (`PRICECHARTING_TOKEN`), `pokeprice graded <card_id>` stores
-PSA 10 / grade 9 / ungraded price points as their own listings
-(source=`pricecharting`), so graded copies get their own series and predictions.
+**Graded cards** — a PSA 10 is a different asset than the same card raw. With
+a [PriceCharting](https://www.pricecharting.com/api-documentation) token
+(`PRICECHARTING_TOKEN`), graded price points (PSA/BGS/CGC/SGC 10s, blended
+grade 7–9.5) become their own listings with their own series and predictions:
+`pokeprice graded <card_id>` for one card, `--watchlist --collection` or
+`--set sv8` for batches — and the daily auto-fetch cycle refreshes graded
+prices for everything you track automatically once the token is set. The
+dashboard's **Condition filters** (All / Raw / Graded → company → grade) slice
+the card table accordingly.
 
 The JSON API behind it: `/api/stats`, `/api/cards`, `/api/cards/{id}`,
 `/api/cards/{id}/ebay`, `/api/movers`, `/api/buys`, `/api/deals`,

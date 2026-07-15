@@ -126,6 +126,13 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
             if payload["latest_run"] and payload["latest_run"].get("metrics"):
                 payload["latest_run"]["metrics"] = json.loads(payload["latest_run"]["metrics"])
             payload["min_price"] = config.MIN_PRICE
+            graded = config.graded_variant_names()
+            payload["graded_listings"] = c.execute(
+                f"""
+                SELECT COUNT(*) FROM (SELECT DISTINCT card_id, source, variant
+                FROM price_snapshots
+                WHERE variant IN ({','.join('?' for _ in graded)}))
+                """, graded).fetchone()[0]
             payload["auto_fetch"] = db.get_meta(c, "auto_fetch")
             payload["auto_fetch_last"] = db.get_meta(c, "auto_fetch_last")
             payload["ebay_live"] = ebay.credentials() is not None
@@ -141,6 +148,9 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
         rarity: str = "",
         chase: int = 0,
         bucket: str = "",
+        grading: str = "",
+        company: str = "",
+        grade: str = "",
         sort: str = "predicted",
         direction: str = "desc",
         min_price: float = 0.0,
@@ -177,6 +187,21 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
         bucket_sql = bucket_clause(bucket, "c")
         if bucket_sql:
             where.append(bucket_sql)
+        # Condition filters: graded copies are their own listings, keyed by
+        # grading variants (psa10, bgs10, grade9, ...). Raw = everything else.
+        all_graded = config.graded_variant_names()
+        if grading == "raw":
+            marks = ",".join(f":gv{i}" for i in range(len(all_graded)))
+            where.append(f"l.variant NOT IN ({marks})")
+            params.update({f"gv{i}": v for i, v in enumerate(all_graded)})
+        elif grading == "graded":
+            wanted = config.graded_variant_names(company or None, grade or None)
+            if wanted:
+                marks = ",".join(f":gv{i}" for i in range(len(wanted)))
+                where.append(f"l.variant IN ({marks})")
+                params.update({f"gv{i}": v for i, v in enumerate(wanted)})
+            else:
+                where.append("1 = 0")  # unknown company/grade combo
         sql = f"""
         {LATEST_LISTINGS_CTE}
         SELECT c.card_id, c.name, c.set_name, c.rarity, c.image_small,

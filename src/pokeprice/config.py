@@ -67,6 +67,41 @@ CHASE_BUCKETS = {
 }
 
 
+# Graded-card variants: a PSA 10 is a different asset than the same card raw,
+# so graded copies live as their own listings (source=pricecharting). The
+# metadata here powers the Condition filters (raw vs graded, company, grade).
+GRADING_COMPANIES = ("PSA", "BGS", "CGC", "SGC")
+GRADED_VARIANTS = {
+    "grade7":  {"company": None, "grade": "7"},
+    "grade8":  {"company": None, "grade": "8"},
+    "grade9":  {"company": None, "grade": "9"},
+    "grade95": {"company": None, "grade": "9.5"},
+    "psa9":    {"company": "PSA", "grade": "9"},
+    "psa10":   {"company": "PSA", "grade": "10"},
+    "bgs95":   {"company": "BGS", "grade": "9.5"},
+    "bgs10":   {"company": "BGS", "grade": "10"},
+    "cgc10":   {"company": "CGC", "grade": "10"},
+    "sgc10":   {"company": "SGC", "grade": "10"},
+}
+
+
+def graded_variant_names(company: str | None = None,
+                         grade: str | None = None) -> list[str]:
+    """Variant keys matching the requested company/grade (None = any).
+
+    Company-agnostic grades (PriceCharting's blended 'grade9' etc.) only
+    surface when no specific company is requested.
+    """
+    out = []
+    for name, meta in GRADED_VARIANTS.items():
+        if company and meta["company"] != company:
+            continue
+        if grade and meta["grade"] != grade:
+            continue
+        out.append(name)
+    return out
+
+
 def in_bucket(rarity, bucket: str) -> bool:
     spec = CHASE_BUCKETS.get(bucket)
     if spec is None:

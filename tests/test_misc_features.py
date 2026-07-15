@@ -142,3 +142,40 @@ def test_pricecharting_requires_token(conn, monkeypatch):
     monkeypatch.delenv("PRICECHARTING_TOKEN", raising=False)
     with pytest.raises(RuntimeError, match="PRICECHARTING_TOKEN"):
         pricecharting.fetch_graded(conn, card["card_id"])
+
+
+def test_graded_variant_names():
+    from pokeprice import config
+
+    assert set(config.graded_variant_names(company="PSA")) == {"psa9", "psa10"}
+    assert "bgs10" in config.graded_variant_names(grade="10")
+    assert "grade9" in config.graded_variant_names(grade="9")
+    # company-specific request excludes the blended grades
+    assert "grade9" not in config.graded_variant_names(company="PSA")
+    assert config.graded_variant_names(company="PSA", grade="7") == []
+    assert "ungraded" not in config.graded_variant_names()
+
+
+def test_graded_batch_cli(tmp_path, monkeypatch):
+    from pokeprice import cli, demo as demo_mod, pricecharting
+
+    monkeypatch.setenv("POKEPRICE_DATA_DIR", str(tmp_path))
+    conn = db.connect(tmp_path / "pokeprice.db")
+    demo_mod.seed(conn, n_cards=5, days=5)
+    ids = [r["card_id"] for r in conn.execute("SELECT card_id FROM cards LIMIT 3")]
+    for cid in ids[:2]:
+        conn.execute("INSERT INTO watchlist (card_id, source, variant, added_at) "
+                     "VALUES (?, 'tcgplayer', 'normal', 'now')", (cid,))
+    conn.execute("INSERT INTO holdings (card_id, source, variant, quantity, added_at) "
+                 "VALUES (?, 'tcgplayer', 'normal', 1, 'now')", (ids[2],))
+    conn.commit()
+    conn.close()
+
+    fetched = []
+    monkeypatch.setattr(pricecharting, "fetch_graded",
+                        lambda conn, card_id, query=None: fetched.append(card_id)
+                        or {"card_id": card_id, "matched": "X", "snapshots": 2,
+                            "query": ""})
+    monkeypatch.setattr("time.sleep", lambda *_: None)
+    assert cli.main(["graded", "--watchlist", "--collection"]) == 0
+    assert sorted(fetched) == sorted(ids)  # union, deduped
