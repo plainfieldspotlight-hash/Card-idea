@@ -50,6 +50,13 @@ BUY_TIERS = [
     ("under-100", "$100 or less", None, 100.0),
 ]
 
+def chase_clause(alias: str = "c") -> str:
+    """SQL twin of config.is_chase — money-maker rarities only."""
+    ors = " OR ".join(
+        f"lower({alias}.rarity) LIKE '%{term}%'" for term in config.CHASE_TERMS)
+    return f"({ors})"
+
+
 LATEST_LISTINGS_CTE = """
 WITH latest AS (
     SELECT s.*, ROW_NUMBER() OVER (
@@ -119,6 +126,7 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
         source: str = "",
         set_id: str = "",
         rarity: str = "",
+        chase: int = 0,
         sort: str = "predicted",
         direction: str = "desc",
         min_price: float = 0.0,
@@ -150,6 +158,8 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
         if rarity:
             where.append("c.rarity = :rarity")
             params["rarity"] = rarity
+        if chase:
+            where.append(chase_clause("c"))
         sql = f"""
         {LATEST_LISTINGS_CTE}
         SELECT c.card_id, c.name, c.set_name, c.rarity, c.image_small,
@@ -356,12 +366,14 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
         min_price: float = 1.0,
         max_price: float | None = None,
         rank: str = "worst_case",
+        chase: int = 0,
     ):
         c = conn()
         try:
             return backtest.run_backtest(
                 c, capital=capital, top_k=top_k, fee_rate=fee_rate,
                 min_price=min_price, max_price=max_price, rank=rank,
+                chase=bool(chase),
             )
         except Exception as exc:
             raise HTTPException(400, str(exc))
@@ -374,6 +386,7 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
         min_return: float = 0.02,
         max_above_market: float = -0.05,
         limit: int = Query(10, le=25),
+        chase: int = 0,
     ):
         """Deal radar: model-liked cards crossed with live eBay prices.
 
@@ -400,9 +413,9 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
                      ON s.card_id = p.card_id AND s.source = p.source
                     AND s.variant = p.variant
                 WHERE p.run_id = ? AND p.prob_up >= ? AND p.predicted_return >= ?
-                      AND p.price >= 1.0
+                      AND p.price >= 1.0{chase_sql}
                 ORDER BY p.predicted_return DESC LIMIT ?
-                """,
+                """.format(chase_sql=f" AND {chase_clause('c')}" if chase else ""),
                 (run["run_id"], min_prob, min_return, limit),
             ).fetchall()]
         finally:
@@ -686,7 +699,8 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
             c.close()
 
     @app.get("/api/movers")
-    def api_movers(limit: int = Query(8, le=50), min_price: float = 1.0):
+    def api_movers(limit: int = Query(8, le=50), min_price: float = 1.0,
+                   chase: int = 0):
         c = conn()
         try:
             run = c.execute(
@@ -694,6 +708,7 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
             ).fetchone()
             if run is None:
                 return {"run": None, "gainers": [], "losers": []}
+            chase_sql = f" AND {chase_clause('c')}" if chase else ""
             def side(order: str):
                 return [
                     dict(r) for r in c.execute(
@@ -701,7 +716,7 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
                         SELECT p.card_id, c.name, c.set_name, c.rarity, c.image_small,
                                p.source, p.variant, p.price, p.predicted_return, p.prob_up
                         FROM predictions p JOIN cards c USING (card_id)
-                        WHERE p.run_id = ? AND p.price >= ?
+                        WHERE p.run_id = ? AND p.price >= ?{chase_sql}
                         ORDER BY p.predicted_return {order} LIMIT ?
                         """,
                         (run["run_id"], min_price, limit),
@@ -720,6 +735,7 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
         min_return: float = 0.02,
         per_tier: int = Query(5, le=20),
         rank: str = "worst_case",
+        chase: int = 0,
     ):
         """Highest-conviction upside picks, bucketed into USD price tiers.
 
@@ -755,7 +771,7 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
                      ON s.card_id = p.card_id AND s.source = p.source
                     AND s.variant = p.variant
                 WHERE p.run_id = ? AND p.prob_up >= ? AND p.predicted_return >= ?
-                """,
+                """ + (f" AND {chase_clause('c')}" if chase else ""),
                 (run["run_id"], min_prob, min_return),
             ).fetchall()]
             rank_key = (lambda r: r["predicted_low"]

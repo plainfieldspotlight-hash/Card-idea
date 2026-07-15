@@ -31,6 +31,9 @@
         realistic spread of outcomes — wide range = less certain.</li>
         <li><b>Chance ↑</b> — the probability the price ends <i>higher</i> in 7 days. 70%+ means
         the model is fairly confident; ~50% means it's a coin flip.</li>
+        <li><b>💰 Money makers only</b> — collectors know commons/uncommons sell as bulk; this
+        toggle narrows everything to the chase rarities that actually trade: Full Arts,
+        Illustration Rares (IR/SIR), Ultra/Secret/Hyper Rares, and Holos.</li>
         <li><b>High-confidence buys</b> — cards where the model is confident <i>and</i> even its
         cautious estimate is positive, grouped by price bracket.</li>
         <li><b>Deal radar</b> — those same promising cards, with links to buy them on eBay.</li>
@@ -45,6 +48,14 @@
       never a guarantee. Not financial advice.</p>
     </div>
   </details>
+
+  <div class="global-filters">
+    <button id="chase-toggle" class="chase-toggle" type="button"
+            title="Collectors' rule: commons and uncommons sell in bulk — the money is in the chase rarities. Filters every section below to Full Arts, Illustration Rares (IR/SIR), Ultra/Secret/Hyper Rares, and Holos.">
+      💰 Money makers only
+      <span class="sub">Full Art · IR · SIR · Ultra · Secret · Hyper · Holo</span>
+    </button>
+  </div>
 
   <section class="movers-wrap" aria-label="Predicted movers">
     <div class="card panel">

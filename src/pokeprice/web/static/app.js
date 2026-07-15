@@ -13,7 +13,10 @@ const SERIES_VARS = ["--series-1", "--series-2", "--series-3", "--series-4", "--
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 const state = { page: 0, limit: 25, q: "", source: "", set: "", rarity: "",
-                minPrice: 1, sort: "predicted", total: 0 };
+                minPrice: 1, sort: "predicted", total: 0,
+                chase: localStorage.getItem("pokeprice-chase") === "1" };
+
+const chaseParam = () => (state.chase ? "&chase=1" : "");
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -130,8 +133,9 @@ function renderMovers(payload) {
   $("#movers-horizon").textContent = horizon;
   $("#movers-horizon2").textContent = horizon;
   const metrics = run.metrics || {};
+  const scopeNote = metrics.scope === "chase" ? " · 💰 money-makers model" : "";
   const badge = run.model_kind === "gbm"
-    ? `model: gradient boosting · ${run.horizon_days}d horizon · as of ${run.as_of}` +
+    ? `model: gradient boosting${scopeNote} · ${run.horizon_days}d horizon · as of ${run.as_of}` +
       (metrics.spearman_ic !== null && metrics.spearman_ic !== undefined ? ` · IC ${metrics.spearman_ic.toFixed(2)}` : "")
     : `model: momentum heuristic · ${run.horizon_days}d horizon · as of ${run.as_of}`;
   $("#model-badge").textContent = badge;
@@ -393,7 +397,7 @@ $("#backtest-run").addEventListener("click", async () => {
   btn.disabled = true;
   btn.textContent = "Running…";
   try {
-    const resp = await fetch("/api/backtest", { method: "POST" });
+    const resp = await fetch(`/api/backtest?chase=${state.chase ? 1 : 0}`, { method: "POST" });
     const payload = await resp.json();
     if (!resp.ok) {
       $("#backtest-stats").textContent = payload.detail || "Backtest failed.";
@@ -631,6 +635,7 @@ function renderTable(payload) {
 async function loadTable() {
   const params = new URLSearchParams({
     q: state.q, source: state.source, set_id: state.set, rarity: state.rarity,
+    chase: state.chase ? "1" : "0",
     sort: state.sort, min_price: String(state.minPrice),
     limit: String(state.limit), offset: String(state.page * state.limit),
   });
@@ -1072,18 +1077,36 @@ document.addEventListener("keydown", (e) => {
   if (e.key === "Escape") $("#detail-panel").classList.add("hidden");
 });
 
+async function loadScopedSections() {
+  const [movers, buys, deals] = await Promise.all([
+    getJSON(`/api/movers?limit=8&min_price=1${chaseParam()}`),
+    getJSON(`/api/buys?rank=worst_case${chaseParam()}`),
+    getJSON(`/api/deals?limit=10${chaseParam()}`),
+  ]);
+  renderMovers(movers);
+  renderBuys(buys);
+  renderDeals(deals);
+}
+
+const chaseButton = $("#chase-toggle");
+function syncChaseButton() {
+  chaseButton.classList.toggle("on", state.chase);
+  chaseButton.setAttribute("aria-pressed", state.chase ? "true" : "false");
+}
+chaseButton.addEventListener("click", () => {
+  state.chase = !state.chase;
+  localStorage.setItem("pokeprice-chase", state.chase ? "1" : "0");
+  state.page = 0;
+  syncChaseButton();
+  loadScopedSections();
+  loadTable();
+});
+
 async function init() {
   try {
-    const [stats, movers, buys, deals] = await Promise.all([
-      getJSON("/api/stats"),
-      getJSON("/api/movers?limit=8&min_price=1"),
-      getJSON("/api/buys"),
-      getJSON("/api/deals"),
-    ]);
-    renderTiles(stats);
-    renderMovers(movers);
-    renderBuys(buys);
-    renderDeals(deals);
+    syncChaseButton();
+    renderTiles(await getJSON("/api/stats"));
+    await loadScopedSections();
     await Promise.all([loadTable(), loadCollection(), loadWatchAndAlerts(),
                        loadReport(), loadFilterOptions()]);
   } catch (err) {

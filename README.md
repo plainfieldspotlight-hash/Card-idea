@@ -103,6 +103,13 @@ data — backfill more sets and more days, run auto-fetch daily, and check
   reports strategy-after-fees vs the raw signal vs just-holding — on the demo
   market the signal is real (+56% gross) and weekly flipping still loses to
   ~13% fees, which is exactly the honest lesson.
+- **Money-makers scope** — collectors know commons sell as bulk; the 💰
+  toggle narrows every dashboard section to chase rarities (Full Art, IR/SIR,
+  Ultra/Secret/Hyper, Holos), and `pokeprice train --chase` trains a model on
+  *only* those cards (features still see the whole market). On real data the
+  dedicated model beat the general one on money-makers, 63.7% vs 59.8%
+  direction accuracy — plain `train` prints its own money-maker score so you
+  can compare on your database. `backtest --chase` trades that universe too.
 - **Stale-listing filter** — training drops observations of listings whose
   price moved in fewer than 20% of their snapshots so far (leakage-safe:
   judged only on each row's own past; young listings aren't pre-judged).

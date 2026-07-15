@@ -51,6 +51,7 @@ class Bundle:
     reg_high: HistGradientBoostingRegressor | None = None
     clf_gain: HistGradientBoostingClassifier | None = None
     feature_names: list = field(default_factory=list)
+    scope: str = "all"  # 'all' or 'chase' (money-maker rarities only)
 
 
 ENSEMBLE_SEEDS = (7, 17, 27)
@@ -100,14 +101,19 @@ def _hgb(kind: str, params: dict | None = None, seed: int = 7, **kw):
 
 
 def build_training_frame(conn: sqlite3.Connection, horizon_days: int,
-                         min_activity: float | None = None) -> pd.DataFrame:
+                         min_activity: float | None = None,
+                         chase: bool = False) -> pd.DataFrame:
     df = features.load_frame(conn)
     if df.empty:
         return df
+    # features first, filters after: chase cards keep full-market context
+    # (set/character/market momentum see every card, not just money makers)
     df = features.add_features(df, events=features.load_events(conn))
     df = features.add_labels(df, horizon_days)
     df = df[df["price"] >= config.MIN_PRICE]
     df = df.dropna(subset=["label"])
+    if chase and not df.empty:
+        df = df[df["rarity"].map(config.is_chase)]
 
     # Stale-listing filter: once a listing has enough history to judge (>= 5
     # transitions), drop its observations when the price has moved in fewer
@@ -221,9 +227,11 @@ def train(
     model_file: Path | None = None,
     tune: bool = False,
     min_activity: float | None = None,
+    chase: bool = False,
     log=print,
 ) -> dict:
-    df = build_training_frame(conn, horizon_days, min_activity=min_activity)
+    df = build_training_frame(conn, horizon_days, min_activity=min_activity,
+                              chase=chase)
     stale_dropped = df.attrs.get("stale_rows_dropped", 0) if hasattr(df, "attrs") else 0
     if len(df) < MIN_TRAIN_ROWS:
         raise InsufficientHistory(
@@ -271,7 +279,22 @@ def train(
         "tune_results": tune_results,
         "min_activity": config.MIN_ACTIVITY if min_activity is None else min_activity,
         "stale_rows_dropped": stale_dropped,
+        "scope": "chase" if chase else "all",
     }
+    if not chase:
+        # the honest comparison for a chase-only model: how does THIS general
+        # model score on the money-maker subset of its own validation window?
+        chase_mask = valid["rarity"].map(config.is_chase).to_numpy()
+        if chase_mask.sum() >= 30:
+            yc, pc = yva[chase_mask], pred_va[chase_mask]
+            nz = yc != 0
+            metrics["chase_subset"] = {
+                "n": int(chase_mask.sum()),
+                "direction_accuracy": float(np.mean((pc[nz] > 0) == (yc[nz] > 0)))
+                if nz.any() else None,
+                "spearman_ic": _spearman(pc, yc),
+            }
+    bundle.scope = "chase" if chase else "all"
     bundle.metrics = metrics
     joblib.dump(bundle, model_file or config.model_path())
     return metrics
@@ -338,6 +361,12 @@ def predict(
         raise RuntimeError(f"No listings priced >= {config.MIN_PRICE}.")
 
     bundle = load_bundle(model_file)
+    if bundle is not None and getattr(bundle, "scope", "all") == "chase":
+        latest = latest[latest["rarity"].map(config.is_chase)]
+        if latest.empty:
+            raise RuntimeError(
+                "The trained model is scoped to money-maker rarities but no such "
+                "listings exist — retrain without --chase or load more data.")
     if bundle is not None:
         horizon = horizon_days or bundle.horizon_days
         scores = apply_bundle(bundle, latest)

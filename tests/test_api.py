@@ -72,6 +72,29 @@ def test_search_multi_word_and_filters(client):
     assert client.get("/api/suggest", params={"q": "x"}).json()["suggestions"] == []
 
 
+def test_chase_filter_money_makers_only(client):
+    all_cards = client.get("/api/cards", params={"min_price": 0, "limit": 200}).json()
+    chase = client.get("/api/cards", params={"min_price": 0, "limit": 200, "chase": 1}).json()
+    assert 0 < chase["total"] < all_cards["total"]
+    # demo rarities: Rare Holo / Ultra Rare / Secret Rare qualify; bulk doesn't
+    bulk = {"Common", "Uncommon", "Rare"}
+    assert all(item["rarity"] not in bulk for item in chase["items"])
+    assert any(item["rarity"] in bulk for item in all_cards["items"])
+
+    movers = client.get("/api/movers", params={"min_price": 0, "chase": 1}).json()
+    for side in ("gainers", "losers"):
+        assert all(m["rarity"] not in bulk for m in movers[side])
+
+    buys = client.get("/api/buys", params={"min_prob": 0, "min_return": -1,
+                                           "chase": 1}).json()
+    for tier in buys["tiers"]:
+        assert all(i["rarity"] not in bulk for i in tier["items"])
+
+    deals = client.get("/api/deals", params={"min_prob": 0, "min_return": -1,
+                                             "chase": 1}).json()
+    assert all(d["rarity"] not in bulk for d in deals["deals"])
+
+
 def test_card_detail_and_404(client):
     listing = client.get("/api/cards", params={"limit": 1, "min_price": 0}).json()["items"][0]
     detail = client.get(f"/api/cards/{listing['card_id']}").json()
