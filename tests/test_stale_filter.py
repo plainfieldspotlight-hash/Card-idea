@@ -128,3 +128,19 @@ def test_general_train_reports_chase_subset(conn, tmp_path):
     assert metrics["scope"] == "all"
     assert "chase_subset" in metrics
     assert metrics["chase_subset"]["n"] >= 30
+
+
+def test_chase_buckets():
+    from pokeprice import config
+
+    assert config.in_bucket("Illustration Rare", "ir")
+    assert not config.in_bucket("Special Illustration Rare", "ir")  # IR excludes SIR
+    assert config.in_bucket("Special Illustration Rare", "sir")
+    assert config.in_bucket("Rare Ultra", "full-art")
+    assert config.in_bucket("Ultra Rare", "full-art")
+    assert config.in_bucket("Hyper Rare", "secret")
+    assert config.in_bucket("Rare Secret", "secret")
+    assert config.in_bucket("Rare Holo VMAX", "holo")
+    assert config.in_bucket("Radiant Rare", "shiny")
+    assert not config.in_bucket("Common", "holo")
+    assert config.in_bucket("Common", "")  # no bucket = no filter

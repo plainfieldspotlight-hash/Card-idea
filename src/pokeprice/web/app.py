@@ -57,6 +57,19 @@ def chase_clause(alias: str = "c") -> str:
     return f"({ors})"
 
 
+def bucket_clause(bucket: str, alias: str = "c") -> str | None:
+    """SQL twin of config.in_bucket — one of Matt's rarity buckets."""
+    spec = config.CHASE_BUCKETS.get(bucket)
+    if spec is None:
+        return None
+    ors = " OR ".join(
+        f"lower({alias}.rarity) LIKE '%{t}%'" for t in spec["any"])
+    clause = f"({ors})"
+    for t in spec["none"]:
+        clause += f" AND lower({alias}.rarity) NOT LIKE '%{t}%'"
+    return f"({clause})"
+
+
 LATEST_LISTINGS_CTE = """
 WITH latest AS (
     SELECT s.*, ROW_NUMBER() OVER (
@@ -127,6 +140,7 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
         set_id: str = "",
         rarity: str = "",
         chase: int = 0,
+        bucket: str = "",
         sort: str = "predicted",
         direction: str = "desc",
         min_price: float = 0.0,
@@ -160,6 +174,9 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
             params["rarity"] = rarity
         if chase:
             where.append(chase_clause("c"))
+        bucket_sql = bucket_clause(bucket, "c")
+        if bucket_sql:
+            where.append(bucket_sql)
         sql = f"""
         {LATEST_LISTINGS_CTE}
         SELECT c.card_id, c.name, c.set_name, c.rarity, c.image_small,
@@ -733,7 +750,7 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
     def api_buys(
         min_prob: float = 0.7,
         min_return: float = 0.02,
-        per_tier: int = Query(5, le=20),
+        per_tier: int = Query(5, le=25),
         rank: str = "worst_case",
         chase: int = 0,
     ):

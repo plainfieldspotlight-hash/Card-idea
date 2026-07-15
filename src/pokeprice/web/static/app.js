@@ -13,8 +13,9 @@ const SERIES_VARS = ["--series-1", "--series-2", "--series-3", "--series-4", "--
 const cssVar = (name) => getComputedStyle(document.documentElement).getPropertyValue(name).trim();
 
 const state = { page: 0, limit: 25, q: "", source: "", set: "", rarity: "",
-                minPrice: 1, sort: "predicted", total: 0,
-                chase: localStorage.getItem("pokeprice-chase") === "1" };
+                bucket: "", minPrice: 1, sort: "predicted", total: 0,
+                // money makers are the default focus; "0" is the explicit opt-out
+                chase: localStorage.getItem("pokeprice-chase") !== "0" };
 
 const chaseParam = () => (state.chase ? "&chase=1" : "");
 
@@ -132,6 +133,8 @@ function renderMovers(payload) {
   const horizon = `next ${run.horizon_days}d`;
   $("#movers-horizon").textContent = horizon;
   $("#movers-horizon2").textContent = horizon;
+  renderExpandable(gain, payload.gainers, moverRow);
+  renderExpandable(lose, payload.losers, moverRow);
   const metrics = run.metrics || {};
   const scopeNote = metrics.scope === "chase" ? " · 💰 money-makers model" : "";
   const badge = run.model_kind === "gbm"
@@ -139,8 +142,6 @@ function renderMovers(payload) {
       (metrics.spearman_ic !== null && metrics.spearman_ic !== undefined ? ` · IC ${metrics.spearman_ic.toFixed(2)}` : "")
     : `model: momentum heuristic · ${run.horizon_days}d horizon · as of ${run.as_of}`;
   $("#model-badge").textContent = badge;
-  payload.gainers.forEach((g) => gain.append(moverRow(g)));
-  payload.losers.forEach((l) => lose.append(moverRow(l)));
 }
 
 /* ---------- high-confidence buys ---------- */
@@ -151,7 +152,7 @@ function buyRow(item) {
   const title = el("div");
   title.append(el("b", null, item.name));
   name.append(title, el("span", "sub",
-    `${fmtMoney(item.price, item.source === "cardmarket" ? "EUR" : "USD")} · ${item.variant} · ${item.source}`));
+    `${item.set_name ?? "—"} · ${fmtMoney(item.price, item.source === "cardmarket" ? "EUR" : "USD")} · ${item.variant}`));
   const stack = el("div", "m-stack");
   const val = el("span", `m-val delta ${deltaClass(item.predicted_return)}`, fmtPct(item.predicted_return));
   if (item.predicted_low !== null && item.predicted_low !== undefined) {
@@ -191,10 +192,27 @@ function renderBuys(payload) {
         payload.run ? "No cards clear the bar right now." : "Run `pokeprice predict` first."));
     } else {
       const list = el("ol", "movers");
-      tier.items.forEach((item) => list.append(buyRow(item)));
+      renderExpandable(list, tier.items, buyRow, 5);
       box.append(list);
     }
     grid.append(box);
+  }
+}
+
+/* ---------- expandable lists (top 25, preview a handful) ---------- */
+function renderExpandable(listEl, items, rowFn, preview = 8) {
+  listEl.replaceChildren();
+  items.slice(0, preview).forEach((item) => listEl.append(rowFn(item)));
+  if (items.length > preview) {
+    const li = el("li", "expand-row");
+    const btn = el("button", "expand-btn", `Show all ${items.length} ▾`);
+    btn.type = "button";
+    btn.addEventListener("click", () => {
+      li.remove();
+      items.slice(preview).forEach((item) => listEl.append(rowFn(item)));
+    });
+    li.append(btn);
+    listEl.append(li);
   }
 }
 
@@ -214,7 +232,10 @@ function renderDeals(payload) {
       list.append(el("li", "empty-note", "No qualifying picks yet — run `pokeprice predict`."));
     }
   }
-  for (const deal of payload.deals.slice(0, 8)) {
+  renderExpandable(list, payload.deals, dealRow);
+}
+
+function dealRow(deal) {
     const li = el("li");
     li.append(thumbEl(deal));
     const name = el("div", "m-name");
@@ -242,8 +263,7 @@ function renderDeals(payload) {
     stack.append(subline);
     li.append(name, stack);
     li.addEventListener("click", () => openDetail(deal.card_id));
-    list.append(li);
-  }
+    return li;
 }
 
 /* ---------- watchlist & alerts ---------- */
@@ -635,7 +655,7 @@ function renderTable(payload) {
 async function loadTable() {
   const params = new URLSearchParams({
     q: state.q, source: state.source, set_id: state.set, rarity: state.rarity,
-    chase: state.chase ? "1" : "0",
+    chase: state.chase ? "1" : "0", bucket: state.bucket,
     sort: state.sort, min_price: String(state.minPrice),
     limit: String(state.limit), offset: String(state.page * state.limit),
   });
@@ -1055,6 +1075,16 @@ $("#search").addEventListener("input", debounce((e) => {
   state.q = e.target.value.trim(); state.page = 0; loadTable();
   refreshSuggestions(e.target.value.trim());
 }, 250));
+document.querySelectorAll(".bucket-chips button").forEach((chip) => {
+  chip.addEventListener("click", () => {
+    state.bucket = chip.dataset.bucket;
+    state.page = 0;
+    document.querySelectorAll(".bucket-chips button").forEach((b) =>
+      b.classList.toggle("on", b === chip));
+    loadTable();
+  });
+});
+
 $("#set-filter").addEventListener("change", (e) => {
   state.set = e.target.value; state.page = 0; loadTable();
 });
@@ -1079,9 +1109,9 @@ document.addEventListener("keydown", (e) => {
 
 async function loadScopedSections() {
   const [movers, buys, deals] = await Promise.all([
-    getJSON(`/api/movers?limit=8&min_price=1${chaseParam()}`),
-    getJSON(`/api/buys?rank=worst_case${chaseParam()}`),
-    getJSON(`/api/deals?limit=10${chaseParam()}`),
+    getJSON(`/api/movers?limit=25&min_price=1${chaseParam()}`),
+    getJSON(`/api/buys?rank=worst_case&per_tier=25${chaseParam()}`),
+    getJSON(`/api/deals?limit=25${chaseParam()}`),
   ]);
   renderMovers(movers);
   renderBuys(buys);
