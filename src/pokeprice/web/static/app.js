@@ -133,8 +133,9 @@ function renderMovers(payload) {
   $("#movers-horizon").textContent = horizon;
   $("#movers-horizon2").textContent = horizon;
   const metrics = run.metrics || {};
+  const scopeNote = metrics.scope === "chase" ? " · 💰 money-makers model" : "";
   const badge = run.model_kind === "gbm"
-    ? `model: gradient boosting · ${run.horizon_days}d horizon · as of ${run.as_of}` +
+    ? `model: gradient boosting${scopeNote} · ${run.horizon_days}d horizon · as of ${run.as_of}` +
       (metrics.spearman_ic !== null && metrics.spearman_ic !== undefined ? ` · IC ${metrics.spearman_ic.toFixed(2)}` : "")
     : `model: momentum heuristic · ${run.horizon_days}d horizon · as of ${run.as_of}`;
   $("#model-badge").textContent = badge;
@@ -396,7 +397,7 @@ $("#backtest-run").addEventListener("click", async () => {
   btn.disabled = true;
   btn.textContent = "Running…";
   try {
-    const resp = await fetch("/api/backtest", { method: "POST" });
+    const resp = await fetch(`/api/backtest?chase=${state.chase ? 1 : 0}`, { method: "POST" });
     const payload = await resp.json();
     if (!resp.ok) {
       $("#backtest-stats").textContent = payload.detail || "Backtest failed.";

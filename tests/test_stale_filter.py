@@ -81,3 +81,50 @@ def test_demo_remove_keeps_real_data(tmp_path, monkeypatch):
     assert conn.execute(
         "SELECT COUNT(*) FROM price_snapshots WHERE card_id = 'real-1'"
     ).fetchone()[0] == 10
+
+
+def test_is_chase_matcher():
+    from pokeprice import config
+
+    assert config.is_chase("Special Illustration Rare")
+    assert config.is_chase("Illustration Rare")
+    assert config.is_chase("Hyper Rare")
+    assert config.is_chase("Rare Ultra")
+    assert config.is_chase("Rare Holo VMAX")
+    assert config.is_chase("Rare Secret")
+    assert not config.is_chase("Common")
+    assert not config.is_chase("Uncommon")
+    assert not config.is_chase("Rare")
+    assert not config.is_chase("Double Rare".replace("Double ", ""))  # plain Rare
+    assert not config.is_chase(None)
+
+
+def test_chase_scoped_training_and_prediction(conn, tmp_path):
+    from pokeprice import demo as demo_mod
+
+    demo_mod.seed(conn, n_cards=24, days=90)
+    model_file = tmp_path / "chase.joblib"
+    metrics = model.train(conn, horizon_days=7, model_file=model_file, chase=True)
+    assert metrics["scope"] == "chase"
+
+    frame = model.build_training_frame(conn, 7, chase=True)
+    from pokeprice import config
+    assert frame["rarity"].map(config.is_chase).all()
+    assert len(frame) < len(model.build_training_frame(conn, 7, chase=False))
+
+    result = model.predict(conn, model_file=model_file)
+    rows = conn.execute(
+        "SELECT DISTINCT c.rarity FROM predictions p JOIN cards c USING (card_id) "
+        "WHERE p.run_id = ?", (result["run_id"],)).fetchall()
+    assert rows
+    assert all(config.is_chase(r["rarity"]) for r in rows)
+
+
+def test_general_train_reports_chase_subset(conn, tmp_path):
+    from pokeprice import demo as demo_mod
+
+    demo_mod.seed(conn, n_cards=24, days=90)
+    metrics = model.train(conn, horizon_days=7, model_file=tmp_path / "m.joblib")
+    assert metrics["scope"] == "all"
+    assert "chase_subset" in metrics
+    assert metrics["chase_subset"]["n"] >= 30

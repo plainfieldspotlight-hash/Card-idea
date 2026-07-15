@@ -77,7 +77,7 @@ def cmd_train(args) -> int:
     conn = db.connect()
     try:
         metrics = model.train(conn, horizon_days=args.horizon, tune=args.tune,
-                              min_activity=args.min_activity)
+                              min_activity=args.min_activity, chase=args.chase)
     except model.InsufficientHistory as exc:
         print(f"Not enough history to train yet.\n{exc}", file=sys.stderr)
         return 1
@@ -88,6 +88,14 @@ def cmd_train(args) -> int:
         if isinstance(value, float):
             value = f"{value:.4f}"
         print(f"  {key:<20} {value}")
+    if metrics.get("scope") == "chase":
+        print("  scope                money-maker rarities only")
+    elif metrics.get("chase_subset"):
+        cs = metrics["chase_subset"]
+        acc = f"{cs['direction_accuracy']:.4f}" if cs.get("direction_accuracy") is not None else "—"
+        ic = f"{cs['spearman_ic']:.4f}" if cs.get("spearman_ic") is not None else "—"
+        print(f"  on money-makers      direction {acc}, IC {ic} ({cs['n']} rows) "
+              "— compare with `pokeprice train --chase`")
     return 0
 
 
@@ -181,6 +189,7 @@ def cmd_backtest(args) -> int:
         result = backtest.run_backtest(
             conn, capital=args.capital, top_k=args.top_k, fee_rate=args.fees,
             min_price=args.min_price, max_price=args.max_price, rank=args.rank,
+            chase=args.chase,
         )
     except model.InsufficientHistory as exc:
         print(f"Cannot backtest yet: {exc}", file=sys.stderr)
@@ -313,6 +322,9 @@ def main(argv=None) -> int:
     p.add_argument("--min-activity", type=float, default=None,
                    help="drop listings whose price moved in fewer than this fraction of "
                         "their snapshots (default %s; 0 disables)" % config.MIN_ACTIVITY)
+    p.add_argument("--chase", action="store_true",
+                   help="train and predict on money-maker rarities only "
+                        "(Full Art / IR / SIR / Ultra / Secret / Hyper / Holo)")
     p.set_defaults(func=cmd_train)
 
     p = sub.add_parser("predict", help="score every listing and store a prediction run")
@@ -344,6 +356,8 @@ def main(argv=None) -> int:
     p.add_argument("--min-price", type=float, default=1.0)
     p.add_argument("--max-price", type=float, default=None)
     p.add_argument("--rank", choices=["worst_case", "expected"], default="worst_case")
+    p.add_argument("--chase", action="store_true",
+                   help="trade money-maker rarities only")
     p.set_defaults(func=cmd_backtest)
 
     p = sub.add_parser("alerts", help="evaluate alert rules and deliver new alerts")

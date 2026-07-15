@@ -34,6 +34,19 @@ BIG_GAIN = float(os.environ.get("POKEPRICE_BIG_GAIN", "0.10"))
 # enough history to judge). Dead vintage listings are noise, not signal.
 MIN_ACTIVITY = float(os.environ.get("POKEPRICE_MIN_ACTIVITY", "0.2"))
 
+# "Money makers": the chase rarities that actually trade — commons/uncommons
+# sell as bulk. Substring-matched against the rarity so every era's naming
+# works (Illustration/Special Illustration Rare, Hyper/Secret/Rainbow,
+# Ultra Rare + Rare Ultra full arts, every Rare Holo tier, golds, shinies,
+# Amazing/Radiant, ACE SPEC).
+CHASE_TERMS = ("illustration", "hyper", "secret", "rainbow", "ultra", "holo",
+               "full art", "gold", "shiny", "amazing", "radiant", "ace spec")
+
+
+def is_chase(rarity) -> bool:
+    text = (rarity or "").lower()
+    return any(term in text for term in CHASE_TERMS)
+
 TCG_API_BASE = os.environ.get("POKEPRICE_API_BASE", "https://api.pokemontcg.io/v2")
 TCG_API_KEY_ENV = "POKEMONTCG_API_KEY"
 

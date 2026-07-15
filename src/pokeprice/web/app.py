@@ -50,17 +50,10 @@ BUY_TIERS = [
     ("under-100", "$100 or less", None, 100.0),
 ]
 
-# "Money makers": the chase rarities that actually trade (per collector wisdom
-# — commons/uncommons are bulk). Matched as substrings against the rarity, so
-# every era's naming works: Illustration Rare / Special Illustration Rare,
-# Hyper/Secret/Rainbow, Ultra Rare + Rare Ultra (full arts), every Rare Holo
-# tier (V/VMAX/VSTAR/Trainer Gallery), golds, shinies, Amazing/Radiant, ACE SPEC.
-CHASE_TERMS = ("illustration", "hyper", "secret", "rainbow", "ultra", "holo",
-               "full art", "gold", "shiny", "amazing", "radiant", "ace spec")
-
-
 def chase_clause(alias: str = "c") -> str:
-    ors = " OR ".join(f"lower({alias}.rarity) LIKE '%{term}%'" for term in CHASE_TERMS)
+    """SQL twin of config.is_chase — money-maker rarities only."""
+    ors = " OR ".join(
+        f"lower({alias}.rarity) LIKE '%{term}%'" for term in config.CHASE_TERMS)
     return f"({ors})"
 
 
@@ -373,12 +366,14 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
         min_price: float = 1.0,
         max_price: float | None = None,
         rank: str = "worst_case",
+        chase: int = 0,
     ):
         c = conn()
         try:
             return backtest.run_backtest(
                 c, capital=capital, top_k=top_k, fee_rate=fee_rate,
                 min_price=min_price, max_price=max_price, rank=rank,
+                chase=bool(chase),
             )
         except Exception as exc:
             raise HTTPException(400, str(exc))

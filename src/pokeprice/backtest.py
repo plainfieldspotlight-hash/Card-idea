@@ -30,9 +30,10 @@ def run_backtest(
     max_price: float | None = None,
     train_frac: float = 0.7,
     rank: str = "worst_case",
+    chase: bool = False,
 ) -> dict:
     horizon = horizon_days or config.DEFAULT_HORIZON_DAYS
-    df = model.build_training_frame(conn, horizon)
+    df = model.build_training_frame(conn, horizon, chase=chase)
     if df.empty or df["snapshot_date"].nunique() < 6:
         raise model.InsufficientHistory(
             "Backtesting needs labeled history across several dates — "
@@ -107,7 +108,7 @@ def run_backtest(
         "params": {
             "capital": capital, "top_k": top_k, "horizon_days": horizon,
             "fee_rate": fee_rate, "min_price": min_price, "max_price": max_price,
-            "train_frac": train_frac, "rank": rank,
+            "train_frac": train_frac, "rank": rank, "chase": chase,
         },
         "test_from": str(pd.Timestamp(cutoff).date()),
         "n_periods": len(periods),
