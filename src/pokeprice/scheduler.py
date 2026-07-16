@@ -70,6 +70,9 @@ def run_cycle(db_path: Path | str | None = None,
             except model.InsufficientHistory as exc:
                 trained.append({"ok": False, "horizon_days": horizon,
                                 "skipped": str(exc)})
+            except Exception as exc:  # one horizon must not sink the cycle
+                trained.append({"ok": False, "horizon_days": horizon,
+                                "error": f"{type(exc).__name__}: {exc}"})
         status["steps"]["train"] = trained
         result = model.predict(conn)
         runs = result["runs"] if "runs" in result else [result]
@@ -77,6 +80,7 @@ def run_cycle(db_path: Path | str | None = None,
             "ok": True,
             "runs": [{"horizon_days": r["horizon_days"],
                       "model_kind": r["model_kind"]} for r in runs],
+            "errors": result.get("errors", []) if isinstance(result, dict) else [],
             "listings_scored": runs[0]["listings_scored"],
         }
         try:

@@ -103,6 +103,10 @@ def cmd_train(args) -> int:
             print(f"{horizon}-day horizon: not enough history yet — skipped.\n"
                   f"  {exc}", file=sys.stderr)
             continue
+        except Exception as exc:  # keep the other horizons alive; say why
+            print(f"{horizon}-day horizon FAILED: {type(exc).__name__}: {exc}",
+                  file=sys.stderr)
+            continue
         trained += 1
         _print_train_metrics(metrics, horizon)
     if not trained:
@@ -120,6 +124,9 @@ def cmd_predict(args) -> int:
         print(f"Run #{run['run_id']}: scored {run['listings_scored']} listings "
               f"with {run['model_kind']} model "
               f"({run['horizon_days']}-day horizon, as of {run['as_of']}).")
+    for err in (result.get("errors") if isinstance(result, dict) else None) or []:
+        print(f"{err['horizon_days']}-day horizon FAILED: {err['error']}",
+              file=sys.stderr)
     skipped = runs[0].get("listings_skipped_thin", 0)
     if skipped:
         print(f"Skipped {skipped} listing(s) seen fewer than {config.MIN_HIST} "
