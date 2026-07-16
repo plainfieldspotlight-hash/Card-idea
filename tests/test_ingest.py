@@ -68,7 +68,8 @@ def test_ingest_mixed_zip(conn, tmp_path):
     names = {r["name"] for r in conn.execute("SELECT name FROM cards")}
     assert names == {"Testachu", "Dumpmander", "Csvmon", "Csvmon two"}
 
-    # tcgplayer normal + holofoil, cardmarket normal + reverseHolo for API card
+    # tcgplayer normal + holofoil; the card's cardmarket (EUR) block is
+    # ignored on purpose — the app is USD-only
     variants = {
         (r["source"], r["variant"])
         for r in conn.execute(
@@ -77,7 +78,6 @@ def test_ingest_mixed_zip(conn, tmp_path):
     }
     assert variants == {
         ("tcgplayer", "normal"), ("tcgplayer", "holofoil"),
-        ("cardmarket", "normal"), ("cardmarket", "reverseHolofoil"),
     }
 
     # set metadata resolved from sets/en.json for the dump-style card

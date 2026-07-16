@@ -24,13 +24,15 @@ NAMES = [
 SUFFIXES = ["", " ex", " V", " VMAX", " GX", " Holo"]
 
 RARITIES = [
-    # (name, base price range, daily vol, spike chance/day)
-    ("Common", (0.10, 0.60), 0.010, 0.001),
-    ("Uncommon", (0.30, 1.50), 0.012, 0.002),
-    ("Rare", (1.00, 5.00), 0.016, 0.004),
-    ("Rare Holo", (3.00, 15.00), 0.020, 0.006),
-    ("Ultra Rare", (10.00, 80.00), 0.026, 0.010),
-    ("Secret Rare", (30.00, 300.00), 0.032, 0.012),
+    # (name, base price range, daily vol, spike chance/day) — ranges sit mostly
+    # above the app's $30 focus floor so demo train/predict have data; commons
+    # stay cheap on purpose (they're bulk in the real market too)
+    ("Common", (2.00, 15.00), 0.010, 0.001),
+    ("Uncommon", (8.00, 28.00), 0.012, 0.002),
+    ("Rare", (20.00, 90.00), 0.016, 0.004),
+    ("Rare Holo", (35.00, 160.00), 0.020, 0.006),
+    ("Ultra Rare", (60.00, 500.00), 0.026, 0.010),
+    ("Secret Rare", (120.00, 1800.00), 0.032, 0.012),
 ]
 
 SETS = [
@@ -78,7 +80,6 @@ def seed(
         phi = 0.35
         recent: list[float] = []
         spike = 0.0
-        use_cardmarket = i % 3 == 0
         history: list[tuple[date, float]] = []
         for d in range(days, -1, -1):
             day = end - timedelta(days=d)
@@ -93,6 +94,7 @@ def seed(
                 history.append((day, float(np.exp(log_p))))
 
         for idx, (day, p) in enumerate(history):
+            trailing = [q for _, q in history[max(0, idx - 15) : idx + 1]]
             snapshots.append({
                 "card_id": card_id,
                 "source": "tcgplayer",
@@ -103,24 +105,9 @@ def seed(
                 "low": round(p * 0.85, 2),
                 "mid": round(p * 1.05, 2),
                 "high": round(p * 1.25, 2),
+                "avg7": round(float(np.mean(trailing[-4:])), 2),
+                "avg30": round(float(np.mean(trailing)), 2),
             })
-            if use_cardmarket:
-                # An independently noisy echo of the USD series, so the two
-                # markets track each other without being identical.
-                fx = 0.92 * (1.0 + float(rng.normal(0, 0.02)))
-                trailing = [q for _, q in history[max(0, idx - 15) : idx + 1]]
-                snapshots.append({
-                    "card_id": card_id,
-                    "source": "cardmarket",
-                    "variant": "normal",
-                    "snapshot_date": day.isoformat(),
-                    "currency": "EUR",
-                    "market": round(p * fx, 2),
-                    "low": round(p * fx * 0.87, 2),
-                    "avg1": round(p * fx * 1.01, 2),
-                    "avg7": round(float(np.mean(trailing[-4:])) * 0.92, 2),
-                    "avg30": round(float(np.mean(trailing)) * 0.92, 2),
-                })
 
     n_cards_inserted = db.upsert_cards(conn, cards)
     n_snaps = db.insert_snapshots(conn, snapshots)

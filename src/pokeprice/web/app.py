@@ -49,12 +49,16 @@ SORTS = {
 for _h in EXTRA_HORIZONS:
     SORTS[f"pred{_h}"] = f"p{_h}.predicted_return"
 
-# High-confidence buy tiers: (key, label, min_exclusive, max_inclusive)
+# High-confidence buy tiers: (key, label, min_exclusive, max_inclusive).
+# The bottom tier's floor is the app-wide focus floor (default $30) — cheaper
+# cards never get predictions, so they can't appear in any tier.
+_FLOOR_LABEL = (f"${config.MIN_PRICE:g} – $100" if 1 <= config.MIN_PRICE < 100
+                else "$100 or less")
 BUY_TIERS = [
     ("over-1000", "Over $1,000", 1000.0, None),
     ("500-1000", "$500 – $1,000", 500.0, 1000.0),
     ("100-500", "$100 – $500", 100.0, 500.0),
-    ("under-100", "$100 or less", None, 100.0),
+    ("under-100", _FLOOR_LABEL, None, 100.0),
 ]
 
 def chase_clause(alias: str = "c") -> str:
@@ -462,7 +466,7 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
         capital: float = 500.0,
         top_k: int = Query(5, ge=1, le=25),
         fee_rate: float = Query(backtest.DEFAULT_FEE_RATE, ge=0, le=0.5),
-        min_price: float = 1.0,
+        min_price: float = max(1.0, config.MIN_PRICE),
         max_price: float | None = None,
         rank: str = "worst_case",
         chase: int = 0,
@@ -511,10 +515,11 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
                      ON s.card_id = p.card_id AND s.source = p.source
                     AND s.variant = p.variant
                 WHERE p.run_id = ? AND p.prob_up >= ? AND p.predicted_return >= ?
-                      AND p.price >= 1.0{chase_sql}
+                      AND p.price >= ?{chase_sql}
                 ORDER BY p.predicted_return DESC LIMIT ?
                 """.format(chase_sql=f" AND {chase_clause('c')}" if chase else ""),
-                (run["run_id"], min_prob, min_return, limit),
+                (run["run_id"], min_prob, min_return,
+                 max(1.0, config.MIN_PRICE), limit),
             ).fetchall()]
         finally:
             c.close()
@@ -797,7 +802,8 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
             c.close()
 
     @app.get("/api/movers")
-    def api_movers(limit: int = Query(8, le=50), min_price: float = 1.0,
+    def api_movers(limit: int = Query(8, le=50),
+                   min_price: float = config.MIN_PRICE,
                    chase: int = 0, horizon: int = 0):
         c = conn()
         try:
@@ -839,8 +845,7 @@ def create_app(db_path: Path | str | None = None) -> FastAPI:
         A listing qualifies when the latest run gives it P(up) >= min_prob AND
         predicted return >= min_return. Ranking defaults to worst_case (the
         10th-percentile predicted return — conservative first); rank=expected
-        uses the median prediction. EUR prices convert at the ECB daily rate
-        for tier bucketing.
+        uses the median prediction.
         """
         c = conn()
         try:

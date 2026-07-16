@@ -70,6 +70,15 @@ TUNE_GRID = [
 ]
 
 
+def _fittable(labels: np.ndarray, min_per_class: int = 5) -> bool:
+    """A classifier is only worth (and safe) fitting when both classes have a
+    handful of members — HGB's stratified early-stopping split crashes on a
+    1-member class, and a couple of positives teach nothing anyway. Callers
+    fall back to deriving the probability from the regressor instead."""
+    values, counts = np.unique(labels, return_counts=True)
+    return len(values) == 2 and int(counts.min()) >= min_per_class
+
+
 class _AvgReg:
     """Average of same-model fits over different seeds (variance reduction)."""
 
@@ -155,7 +164,7 @@ def fit_bundle(df_train: pd.DataFrame, horizon_days: int,
 
     clf = clf_gain = None
     up = (y > 0).astype(int)
-    if len(np.unique(up)) == 2:
+    if _fittable(up):
         members = []
         for seed in seeds:
             c = _hgb("clf", params, seed, categorical_features=cat_indices)
@@ -163,7 +172,7 @@ def fit_bundle(df_train: pd.DataFrame, horizon_days: int,
             members.append(c)
         clf = _AvgClf(members) if len(members) > 1 else members[0]
     big = (y >= config.BIG_GAIN).astype(int)
-    if len(np.unique(big)) == 2:
+    if _fittable(big):
         members = []
         for seed in seeds:
             c = _hgb("clf", params, seed, categorical_features=cat_indices)

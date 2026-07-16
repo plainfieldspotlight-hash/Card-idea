@@ -21,9 +21,10 @@ const VARIANT_LABELS = {
 };
 const fmtVariant = (v) => VARIANT_LABELS[v] ?? v;
 
-const state = { page: 0, limit: 25, q: "", source: "", set: "", rarity: "",
+const state = { page: 0, limit: 25, q: "", set: "", rarity: "",
                 bucket: "", grading: "", company: "", grade: "",
-                minPrice: 1, sort: "predicted", total: 0,
+                // the app's focus floor: cards under $30 are bulk
+                minPrice: 30, sort: "predicted", total: 0,
                 // 0 = the default (7d) horizon; 30/60 switch the action lists
                 horizon: 0,
                 // money makers are the default focus; "0" is the explicit opt-out
@@ -125,7 +126,7 @@ function moverRow(item) {
   const title = el("div");
   title.append(el("b", null, item.name));
   name.append(title, el("span", "sub", `${item.set_name ?? ""} · ${fmtVariant(item.variant)} · ${item.source}`));
-  const price = el("span", "m-price", fmtMoney(item.price, item.source === "cardmarket" ? "EUR" : "USD"));
+  const price = el("span", "m-price", fmtMoney(item.price, "USD"));
   const val = el("span", `m-val delta ${deltaClass(item.predicted_return)}`, fmtPct(item.predicted_return));
   li.append(name, price, val);
   li.addEventListener("click", () => openDetail(item.card_id));
@@ -165,7 +166,7 @@ function buyRow(item) {
   const title = el("div");
   title.append(el("b", null, item.name));
   name.append(title, el("span", "sub",
-    `${item.set_name ?? "—"} · ${fmtMoney(item.price, item.source === "cardmarket" ? "EUR" : "USD")} · ${fmtVariant(item.variant)}`));
+    `${item.set_name ?? "—"} · ${fmtMoney(item.price, "USD")} · ${fmtVariant(item.variant)}`));
   const stack = el("div", "m-stack");
   const val = el("span", `m-val delta ${deltaClass(item.predicted_return)}`, fmtPct(item.predicted_return));
   if (item.predicted_low !== null && item.predicted_low !== undefined) {
@@ -195,7 +196,7 @@ function renderBuys(payload) {
   grid.replaceChildren();
   const crit = payload.criteria;
   $("#buys-criteria").textContent = payload.run
-    ? `P(up) ≥ ${(crit.min_prob * 100).toFixed(0)}% and predicted ≥ ${fmtPct(crit.min_return)} over ${payload.run.horizon_days}d · price tiers at face value (USD/EUR)`
+    ? `P(up) ≥ ${(crit.min_prob * 100).toFixed(0)}% and predicted ≥ ${fmtPct(crit.min_return)} over ${payload.run.horizon_days}d · price tiers in USD`
     : "";
   for (const tier of payload.tiers) {
     const box = el("div", "buy-tier");
@@ -601,11 +602,11 @@ function renderTable(payload) {
   body.replaceChildren();
   if (!payload.items.length) {
     const tr = el("tr");
-    const searching = state.q || state.set || state.rarity || state.source || state.bucket;
+    const searching = state.q || state.set || state.rarity || state.bucket;
     const message = state.grading === "graded"
       ? "No graded prices stored yet. Graded data comes from PriceCharting (set PRICECHARTING_TOKEN, see README), then run: python -m pokeprice graded --watchlist --collection"
       : searching && state.minPrice > 0
-      ? `No matches at your price floor — cheap cards are hidden by the "≥ ${state.minPrice.toFixed(2)}" filter. Try switching it to "Any price".`
+      ? `No matches at your price floor — cheaper cards are hidden by the "≥ $${state.minPrice}" filter. Try switching it to "Any price".`
       : searching
         ? "No cards match that search."
         : "No cards yet — run `pokeprice demo` for a demo market, `pokeprice ingest pokemon.zip` for your own data, or `pokeprice fetch` for live data.";
@@ -673,7 +674,7 @@ function renderTable(payload) {
 
 async function loadTable() {
   const params = new URLSearchParams({
-    q: state.q, source: state.source, set_id: state.set, rarity: state.rarity,
+    q: state.q, set_id: state.set, rarity: state.rarity,
     chase: state.chase ? "1" : "0", bucket: state.bucket,
     grading: state.grading, company: state.company, grade: state.grade,
     sort: state.sort, min_price: String(state.minPrice),
@@ -1141,9 +1142,6 @@ $("#set-filter").addEventListener("change", (e) => {
 $("#rarity-filter").addEventListener("change", (e) => {
   state.rarity = e.target.value; state.page = 0; loadTable();
 });
-$("#source-filter").addEventListener("change", (e) => {
-  state.source = e.target.value; state.page = 0; loadTable();
-});
 $("#min-price").addEventListener("change", (e) => {
   state.minPrice = Number(e.target.value); state.page = 0; loadTable();
 });
@@ -1159,7 +1157,7 @@ document.addEventListener("keydown", (e) => {
 
 async function loadScopedSections() {
   const [movers, buys, deals] = await Promise.all([
-    getJSON(`/api/movers?limit=25&min_price=1${chaseParam()}${horizonParam()}`),
+    getJSON(`/api/movers?limit=25${chaseParam()}${horizonParam()}`),
     getJSON(`/api/buys?rank=worst_case&per_tier=25${chaseParam()}${horizonParam()}`),
     getJSON(`/api/deals?limit=25${chaseParam()}${horizonParam()}`),
   ]);

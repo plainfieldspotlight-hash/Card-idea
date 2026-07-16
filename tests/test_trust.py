@@ -134,7 +134,9 @@ def test_event_recency_feature(conn):
 
 
 def test_cross_card_features_leave_one_out(conn):
-    demo.seed(conn, n_cards=12, days=30)
+    # 36 cards wraps the 30-name roster, so characters repeat across listings
+    # (char_mom needs same-character peers; demo listings are one per card)
+    demo.seed(conn, n_cards=36, days=30)
     df = features.load_frame(conn)
     df = features.add_features(df)
     # every listing with same-set peers on the same date gets a set momentum

@@ -131,6 +131,34 @@ def _migrate(conn: sqlite3.Connection) -> None:
             if name not in existing:
                 conn.execute(f"ALTER TABLE {table} ADD COLUMN {coldef}")
     conn.commit()
+    _purge_non_usd(conn)
+
+
+def _purge_non_usd(conn: sqlite3.Connection) -> None:
+    """One-time cleanup: the app is USD-only, so drop non-USD price series
+    (Cardmarket EUR) that older versions collected, plus their predictions.
+    Guarded by a meta flag so it costs one indexed lookup per connect."""
+    if get_meta(conn, "usd_only_purge"):
+        return
+    listings = conn.execute(
+        "SELECT DISTINCT card_id, source, variant FROM price_snapshots "
+        "WHERE currency IS NOT NULL AND currency != 'USD'"
+    ).fetchall()
+    preds = snaps = 0
+    if listings:
+        preds = conn.execute(
+            "DELETE FROM predictions WHERE (card_id, source, variant) IN ("
+            "  SELECT DISTINCT card_id, source, variant FROM price_snapshots"
+            "  WHERE currency IS NOT NULL AND currency != 'USD')"
+        ).rowcount
+        snaps = conn.execute(
+            "DELETE FROM price_snapshots WHERE currency IS NOT NULL AND currency != 'USD'"
+        ).rowcount
+    set_meta(conn, "usd_only_purge", {
+        "listings_removed": len(listings),
+        "snapshots_removed": snaps,
+        "predictions_removed": preds,
+    })
 
 
 def set_meta(conn: sqlite3.Connection, key: str, value) -> None:

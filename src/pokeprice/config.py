@@ -32,9 +32,11 @@ def model_path(horizon_days: int | None = None) -> Path:
     return data_dir() / f"model-{horizon_days}d.joblib"
 
 
-# Cards below this price are excluded from training and ranking: percentage
-# moves on penny cards are mostly bid/ask noise, not signal.
-MIN_PRICE = float(os.environ.get("POKEPRICE_MIN_PRICE", "0.25"))
+# The app's focus floor: cards below this price are excluded from training,
+# predictions, and the action screens. Cheap cards are bulk — percentage moves
+# on them are bid/ask noise and the dollars don't matter. Snapshots still get
+# stored, so lowering the floor later brings the history with it.
+MIN_PRICE = float(os.environ.get("POKEPRICE_MIN_PRICE", "30"))
 
 # Forward-looking window (days) that predictions cover by default.
 DEFAULT_HORIZON_DAYS = int(os.environ.get("POKEPRICE_HORIZON", "7"))

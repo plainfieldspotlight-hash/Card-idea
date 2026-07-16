@@ -25,7 +25,8 @@
     <div class="explainer-body">
       <p><b>What this app does:</b> it tracks card prices every day, learns from how they've
       moved before, and estimates where each card's price is heading over the next 7, 30, and
-      60 days.</p>
+      60 days. Everything is in USD, and the app focuses on cards worth <b>$30 and up</b> —
+      below that, price moves are pocket change and mostly noise.</p>
       <ul>
         <li><b>Predicted move</b> — the model's best guess, e.g. <b>+5%</b> means it expects the
         price to be about 5% higher in a week. The small range next to it ("−1% … +12%") is the
@@ -99,7 +100,7 @@
 
   <section class="card panel" aria-label="My collection">
     <div class="panel-head">
-      <h2>My collection <span class="sub">totals in USD (EUR converts at the ECB daily rate) · add cards from any card's detail panel</span></h2>
+      <h2>My collection <span class="sub">totals in USD · add cards from any card's detail panel</span></h2>
       <label class="import-label">Import CSV
         <input type="file" id="collection-import" accept=".csv,text/csv" hidden>
       </label>
@@ -131,17 +132,13 @@
       <select id="rarity-filter" aria-label="Rarity" title="Show only one rarity">
         <option value="">All rarities</option>
       </select>
-      <select id="source-filter" aria-label="Price source" title="Which marketplace's price to show">
-        <option value="">All sources</option>
-        <option value="tcgplayer">TCGplayer (USD)</option>
-        <option value="cardmarket">Cardmarket (EUR)</option>
-      </select>
       <select id="min-price" aria-label="Minimum price">
         <option value="0">Any price</option>
-        <option value="1" selected>≥ 1.00</option>
-        <option value="5">≥ 5.00</option>
-        <option value="20">≥ 20.00</option>
-        <option value="100">≥ 100.00</option>
+        <option value="30" selected>≥ $30</option>
+        <option value="50">≥ $50</option>
+        <option value="100">≥ $100</option>
+        <option value="250">≥ $250</option>
+        <option value="500">≥ $500</option>
       </select>
       <select id="sort" aria-label="Sort by">
         <option value="predicted">Sort: predicted 7d</option>
@@ -275,7 +272,7 @@
 
   <footer class="foot sub">
     Predictions are statistical estimates for research/fun — not financial advice.
-    Prices: TCGplayer (USD) &amp; Cardmarket (EUR) via the Pokemon TCG API and your own imports.
+    Prices: TCGplayer (USD) via the Pokemon TCG API, tcgcsv.com history, and your own imports.
   </footer>
 </main>
 

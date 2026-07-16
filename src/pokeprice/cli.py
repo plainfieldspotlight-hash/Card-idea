@@ -401,7 +401,7 @@ def main(argv=None) -> int:
     p.add_argument("--top-k", type=int, default=5)
     p.add_argument("--fees", type=float, default=backtest.DEFAULT_FEE_RATE,
                    help="sell-side fee rate (default %(default)s ≈ eBay)")
-    p.add_argument("--min-price", type=float, default=1.0)
+    p.add_argument("--min-price", type=float, default=max(1.0, config.MIN_PRICE))
     p.add_argument("--max-price", type=float, default=None)
     p.add_argument("--rank", choices=["worst_case", "expected"], default="worst_case")
     p.add_argument("--chase", action="store_true",
