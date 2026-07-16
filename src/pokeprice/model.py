@@ -401,50 +401,60 @@ def predict(
     multi = horizon_days is None and model_file is None
     horizons = list(config.HORIZONS) if multi else [horizon_days]
     runs = []
+    errors = []
+    # each horizon succeeds or fails on its own: a broken/corrupt model file
+    # (or any surprise) for one horizon must not silently kill the others —
+    # that leaves the dashboard with missing runs and dead horizon switches
     for h in horizons:
-        bundle = load_bundle(h, path=model_file)
-        latest = latest_all
-        if bundle is not None and getattr(bundle, "scope", "all") == "chase":
-            latest = latest[latest["rarity"].map(config.is_chase)]
-            if latest.empty:
-                raise RuntimeError(
-                    "The trained model is scoped to money-maker rarities but no "
-                    "such listings exist — retrain without --chase or load more data.")
-        if bundle is not None:
-            horizon = h or bundle.horizon_days
-            scores = apply_bundle(bundle, latest)
-            model_kind = "gbm"
-            metrics = bundle.metrics
-        else:
-            horizon = h or config.DEFAULT_HORIZON_DAYS
-            scores = _momentum_scores(latest, horizon)
-            model_kind = "momentum"
-            metrics = {"note": "momentum heuristic — train a model once history accumulates"}
+        try:
+            bundle = load_bundle(h, path=model_file)
+            latest = latest_all
+            if bundle is not None and getattr(bundle, "scope", "all") == "chase":
+                latest = latest[latest["rarity"].map(config.is_chase)]
+                if latest.empty:
+                    raise RuntimeError(
+                        "The trained model is scoped to money-maker rarities but no "
+                        "such listings exist — retrain without --chase or load more data.")
+            if bundle is not None:
+                horizon = h or bundle.horizon_days
+                scores = apply_bundle(bundle, latest)
+                model_kind = "gbm"
+                metrics = bundle.metrics
+            else:
+                horizon = h or config.DEFAULT_HORIZON_DAYS
+                scores = _momentum_scores(latest, horizon)
+                model_kind = "momentum"
+                metrics = {"note": "momentum heuristic — train a model once history accumulates"}
 
-        as_of = str(latest["snapshot_date"].max().date())
-        cur = conn.execute(
-            "INSERT INTO prediction_runs (created_at, model_kind, horizon_days, as_of, metrics) "
-            "VALUES (?, ?, ?, ?, ?)",
-            (_now(), model_kind, int(horizon), as_of, json.dumps(metrics)),
-        )
-        run_id = cur.lastrowid
-        rows = [
-            (
-                run_id, r.card_id, r.source, r.variant, float(r.price),
-                float(scores["predicted"][i]), float(scores["prob_up"][i]),
-                float(scores["low"][i]), float(scores["high"][i]),
-                float(scores["prob_gain"][i]),
+            as_of = str(latest["snapshot_date"].max().date())
+            cur = conn.execute(
+                "INSERT INTO prediction_runs (created_at, model_kind, horizon_days, as_of, metrics) "
+                "VALUES (?, ?, ?, ?, ?)",
+                (_now(), model_kind, int(horizon), as_of, json.dumps(metrics)),
             )
-            for i, r in enumerate(latest.itertuples())
-        ]
-        conn.executemany(
-            "INSERT OR REPLACE INTO predictions "
-            "(run_id, card_id, source, variant, price, predicted_return, prob_up, "
-            " predicted_low, predicted_high, prob_gain) "
-            "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
-            rows,
-        )
-        conn.commit()
+            run_id = cur.lastrowid
+            rows = [
+                (
+                    run_id, r.card_id, r.source, r.variant, float(r.price),
+                    float(scores["predicted"][i]), float(scores["prob_up"][i]),
+                    float(scores["low"][i]), float(scores["high"][i]),
+                    float(scores["prob_gain"][i]),
+                )
+                for i, r in enumerate(latest.itertuples())
+            ]
+            conn.executemany(
+                "INSERT OR REPLACE INTO predictions "
+                "(run_id, card_id, source, variant, price, predicted_return, prob_up, "
+                " predicted_low, predicted_high, prob_gain) "
+                "VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?)",
+                rows,
+            )
+            conn.commit()
+        except Exception as exc:
+            conn.rollback()  # never leave a half-written (empty) run behind
+            errors.append({"horizon_days": h,
+                           "error": f"{type(exc).__name__}: {exc}"})
+            continue
         runs.append({
             "run_id": run_id,
             "model_kind": model_kind,
@@ -453,4 +463,9 @@ def predict(
             "listings_scored": len(rows),
             "listings_skipped_thin": skipped_thin,
         })
-    return {"runs": runs} if multi else runs[0]
+    if not runs:
+        raise RuntimeError("Every horizon failed to predict: " + "; ".join(
+            f"{e['horizon_days']}d -> {e['error']}" for e in errors))
+    if multi:
+        return {"runs": runs, "errors": errors}
+    return runs[0]

@@ -140,3 +140,29 @@ def test_cli_predict_reports_every_horizon(tmp_path, monkeypatch, capsys):
     for horizon in config.HORIZONS:
         assert f"({horizon}-day horizon" in out
     assert f"Top predicted gainers ({config.DEFAULT_HORIZON_DAYS}d)" in out
+
+
+def test_one_broken_horizon_does_not_kill_the_others(conn, tmp_path, monkeypatch):
+    """A corrupt/unloadable model for one horizon must still leave the other
+    horizons' runs in place (and report the failure) — otherwise the dashboard
+    silently loses whole horizons and the 'Looking ahead' switch goes dead."""
+    monkeypatch.setenv("POKEPRICE_DATA_DIR", str(tmp_path))
+    demo.seed(conn, n_cards=8, days=30)
+    # a truncated joblib file for the default horizon: load explodes
+    config.model_path(config.DEFAULT_HORIZON_DAYS).write_bytes(b"not a model")
+
+    result = model.predict(conn)
+    assert {r["horizon_days"] for r in result["runs"]} == {30, 60}
+    assert len(result["errors"]) == 1
+    assert result["errors"][0]["horizon_days"] == config.DEFAULT_HORIZON_DAYS
+    # no half-written run rows for the failed horizon
+    assert conn.execute(
+        "SELECT COUNT(*) FROM prediction_runs WHERE horizon_days = ?",
+        (config.DEFAULT_HORIZON_DAYS,)).fetchone()[0] == 0
+
+    # and everything failing raises with the reasons in the message
+    for h in (30, 60):
+        config.model_path(h).write_bytes(b"also not a model")
+    import pytest as _pytest
+    with _pytest.raises(RuntimeError, match="Every horizon failed"):
+        model.predict(conn)
