@@ -161,6 +161,13 @@ live at `data/model.joblib` (7d) and `data/model-{30,60}d.joblib`.
   training and predictions — the app focuses on cards where the dollars
   matter; cheap bulk moves are bid/ask noise. Snapshots below the floor are
   still stored, so lowering the floor later brings their history with it.
+- Listings seen fewer than `POKEPRICE_MIN_HIST` (default **3**) times are
+  never trained on or scored. One or two sightings carry no signal, and
+  sparse listings' labels all land on the same few fetch dates — a model
+  trained on them learns "no history = huge move" and floods the gainer
+  lists with fantasy numbers. `pokeprice backfill` is the cure: it imports
+  months of real daily history for every set in your catalog (re-run it
+  after adding sets — it fills in only what's missing).
 
 On the demo market (a momentum-y random walk with hype spikes) the model reaches
 ~57% direction accuracy and ~0.27 Spearman IC on the holdout — it finds the

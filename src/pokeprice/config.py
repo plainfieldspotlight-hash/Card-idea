@@ -38,6 +38,12 @@ def model_path(horizon_days: int | None = None) -> Path:
 # stored, so lowering the floor later brings the history with it.
 MIN_PRICE = float(os.environ.get("POKEPRICE_MIN_PRICE", "30"))
 
+# A listing needs at least this many price snapshots before it's trained on
+# or scored. One or two sightings tell the model nothing — worse, sparse
+# listings' labels all come from the same few fetch dates, so a model trained
+# on them learns "no history = huge move" and pollutes the gainer lists.
+MIN_HIST = int(os.environ.get("POKEPRICE_MIN_HIST", "3"))
+
 # Forward-looking window (days) that predictions cover by default.
 DEFAULT_HORIZON_DAYS = int(os.environ.get("POKEPRICE_HORIZON", "7"))
 

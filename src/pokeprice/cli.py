@@ -120,6 +120,11 @@ def cmd_predict(args) -> int:
         print(f"Run #{run['run_id']}: scored {run['listings_scored']} listings "
               f"with {run['model_kind']} model "
               f"({run['horizon_days']}-day horizon, as of {run['as_of']}).")
+    skipped = runs[0].get("listings_skipped_thin", 0)
+    if skipped:
+        print(f"Skipped {skipped} listing(s) seen fewer than {config.MIN_HIST} "
+              "times — no prediction without some history. "
+              "`pokeprice backfill` imports months of daily prices.")
     primary = next((r for r in runs
                     if r["horizon_days"] == config.DEFAULT_HORIZON_DAYS), runs[0])
     rows = conn.execute(
