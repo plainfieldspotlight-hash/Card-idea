@@ -120,6 +120,10 @@ def build_training_frame(conn: sqlite3.Connection, horizon_days: int,
     df = features.add_features(df, events=features.load_events(conn))
     df = features.add_labels(df, horizon_days)
     df = df[df["price"] >= config.MIN_PRICE]
+    # n_hist counts prior snapshots, so `>= MIN_HIST - 1` keeps observations
+    # from a listing's MIN_HIST-th price point onward — barely-seen listings'
+    # labels cluster on the same few fetch dates and teach systematic bias
+    df = df[df["n_hist"] >= config.MIN_HIST - 1]
     df = df.dropna(subset=["label"])
     if chase and not df.empty:
         df = df[df["rarity"].map(config.is_chase)]
@@ -382,6 +386,17 @@ def predict(
     latest_all = latest_all[latest_all["price"] >= config.MIN_PRICE]
     if latest_all.empty:
         raise RuntimeError(f"No listings priced >= {config.MIN_PRICE}.")
+    # never guess on listings we've barely seen: one or two snapshots carry
+    # no signal, and the GBM extrapolates wildly on their empty features
+    thin = latest_all["n_hist"] < config.MIN_HIST - 1
+    skipped_thin = int(thin.sum())
+    latest_all = latest_all[~thin]
+    if latest_all.empty:
+        raise RuntimeError(
+            f"No listing has at least {config.MIN_HIST} price snapshots yet — "
+            "predictions need some history per card. Run `pokeprice backfill` "
+            "to import months of real daily prices, or keep fetching."
+        )
 
     multi = horizon_days is None and model_file is None
     horizons = list(config.HORIZONS) if multi else [horizon_days]
@@ -436,5 +451,6 @@ def predict(
             "horizon_days": int(horizon),
             "as_of": as_of,
             "listings_scored": len(rows),
+            "listings_skipped_thin": skipped_thin,
         })
     return {"runs": runs} if multi else runs[0]

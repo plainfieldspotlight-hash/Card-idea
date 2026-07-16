@@ -45,8 +45,10 @@ def test_training_frame_drops_stale_listings(conn):
     df_off = model.build_training_frame(conn, horizon_days=7, min_activity=0)
     assert set(df_off["card_id"]) == {"stale-1", "live-1"}
 
-    # young listings (not enough transitions to judge) are kept, not pre-judged
-    _seed_listing(conn, "young-1", [33.0, 33.0, 33.0])
+    # young listings (not enough transitions to judge staleness) are kept, not
+    # pre-judged — 5 snapshots clears the separate MIN_HIST=3 depth gate while
+    # staying below the 5-transition activity threshold
+    _seed_listing(conn, "young-1", [33.0] * 5)
     df2 = model.build_training_frame(conn, horizon_days=1, min_activity=0.2)
     assert "young-1" in set(df2["card_id"])
 

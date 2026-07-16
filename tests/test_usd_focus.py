@@ -108,3 +108,33 @@ def test_lopsided_classifier_labels_fall_back_instead_of_crashing(conn):
     scores = model.apply_bundle(bundle, df.head(10))
     assert ((scores["prob_up"] > 0) & (scores["prob_up"] < 1)).all()
     assert ((scores["prob_gain"] > 0) & (scores["prob_gain"] < 1)).all()
+
+
+def test_thin_history_listings_are_never_scored(conn, tmp_path):
+    demo.seed(conn, n_cards=8, days=20)
+    # a listing seen only once — like a set fetched for the first time today
+    cid = conn.execute("SELECT card_id FROM cards LIMIT 1").fetchone()[0]
+    db.insert_snapshots(conn, [{
+        "card_id": cid, "source": "tcgplayer", "variant": "1stEditionHolofoil",
+        "snapshot_date": "2026-07-15", "currency": "USD", "market": 150.0,
+    }])
+    result = model.predict(conn, model_file=tmp_path / "missing.joblib")
+    assert result["listings_skipped_thin"] >= 1
+    scored = conn.execute(
+        "SELECT COUNT(*) FROM predictions WHERE variant = '1stEditionHolofoil'"
+    ).fetchone()[0]
+    assert scored == 0
+    # and training rows respect the same depth gate
+    frame = model.build_training_frame(conn, horizon_days=7)
+    assert (frame["n_hist"] >= config.MIN_HIST - 1).all()
+
+
+def test_predict_errors_clearly_when_no_history_anywhere(conn, tmp_path):
+    db.upsert_cards(conn, [{"card_id": "solo-1", "name": "Solo", "rarity": "Rare Holo"}])
+    db.insert_snapshots(conn, [{
+        "card_id": "solo-1", "source": "tcgplayer", "variant": "normal",
+        "snapshot_date": "2026-07-15", "currency": "USD", "market": 99.0,
+    }])
+    import pytest as _pytest
+    with _pytest.raises(RuntimeError, match="price snapshots"):
+        model.predict(conn, model_file=tmp_path / "missing.joblib")
