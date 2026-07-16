@@ -49,6 +49,7 @@ def load_frame(conn: sqlite3.Connection) -> pd.DataFrame:
                s.market, s.low, s.mid, s.high, s.avg1, s.avg7, s.avg30,
                c.name, c.set_id, c.set_name, c.rarity, c.supertype, c.set_release_date
         FROM price_snapshots s JOIN cards c USING (card_id)
+        WHERE s.currency IS NULL OR s.currency = 'USD'
         """,
         conn,
     )

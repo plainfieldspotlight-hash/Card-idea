@@ -19,8 +19,8 @@ def _seed_listing(conn, card_id, prices, name="Card"):
 
 
 def test_activity_feature(conn):
-    _seed_listing(conn, "stale-1", [5.0] * 20)                     # never moves
-    _seed_listing(conn, "live-1", [5.0 + 0.1 * i for i in range(20)])  # always moves
+    _seed_listing(conn, "stale-1", [50.0] * 20)                     # never moves
+    _seed_listing(conn, "live-1", [50.0 + 1.0 * i for i in range(20)])  # always moves
     df = features.add_features(features.load_frame(conn))
     stale = df[df["card_id"] == "stale-1"]
     live = df[df["card_id"] == "live-1"]
@@ -31,8 +31,8 @@ def test_activity_feature(conn):
 
 
 def test_training_frame_drops_stale_listings(conn):
-    _seed_listing(conn, "stale-1", [5.0] * 30)
-    _seed_listing(conn, "live-1", [5.0 * (1.01 ** i) for i in range(30)])
+    _seed_listing(conn, "stale-1", [50.0] * 30)
+    _seed_listing(conn, "live-1", [50.0 * (1.01 ** i) for i in range(30)])
     df_filtered = model.build_training_frame(conn, horizon_days=7, min_activity=0.2)
     stale_rows = df_filtered[df_filtered["card_id"] == "stale-1"]
     # only the unjudgeable early observations survive (no look-ahead selection);
@@ -46,16 +46,16 @@ def test_training_frame_drops_stale_listings(conn):
     assert set(df_off["card_id"]) == {"stale-1", "live-1"}
 
     # young listings (not enough transitions to judge) are kept, not pre-judged
-    _seed_listing(conn, "young-1", [3.0, 3.0, 3.0])
+    _seed_listing(conn, "young-1", [33.0, 33.0, 33.0])
     df2 = model.build_training_frame(conn, horizon_days=1, min_activity=0.2)
     assert "young-1" in set(df2["card_id"])
 
 
 def test_train_reports_stale_drop(conn, tmp_path):
     for i in range(6):
-        _seed_listing(conn, f"live-{i}", [4.0 + 0.05 * ((j + i) % 9) for j in range(70)])
+        _seed_listing(conn, f"live-{i}", [40.0 + 0.5 * ((j + i) % 9) for j in range(70)])
     for i in range(3):
-        _seed_listing(conn, f"stale-{i}", [7.0] * 70)
+        _seed_listing(conn, f"stale-{i}", [70.0] * 70)
     metrics = model.train(conn, horizon_days=7, model_file=tmp_path / "m.joblib",
                           min_activity=0.2)
     assert metrics["min_activity"] == 0.2

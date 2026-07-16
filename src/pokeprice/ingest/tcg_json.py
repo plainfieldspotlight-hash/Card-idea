@@ -2,9 +2,11 @@
 
 Handles the format used by api.pokemontcg.io and the PokemonTCG/pokemon-tcg-data
 GitHub dump: card objects with optional `tcgplayer.prices` (USD, one block per
-print variant) and `cardmarket.prices` (EUR, flat keys with reverse-holo
-prefixes). A file may be a bare card list, an API envelope {"data": [...]},
-or a single card object.
+print variant). A file may be a bare card list, an API envelope
+{"data": [...]}, or a single card object.
+
+The app is USD-only: `cardmarket.prices` blocks (EUR) are ignored on purpose —
+mixing currencies muddied every price comparison for no extra signal.
 """
 from __future__ import annotations
 
@@ -92,40 +94,6 @@ def snapshot_rows(card: Mapping, default_date: str | None = None) -> list[dict]:
             "direct_low": prices.get("directLow"),
         })
 
-    cm = card.get("cardmarket") or {}
-    cm_prices = cm.get("prices") or {}
-    if cm_prices:
-        cm_date = _parse_date(cm.get("updatedAt"), default_date)
-        base = {
-            "card_id": card_id,
-            "source": "cardmarket",
-            "variant": "normal",
-            "snapshot_date": cm_date,
-            "currency": "EUR",
-            "market": cm_prices.get("trendPrice") or cm_prices.get("averageSellPrice"),
-            "low": cm_prices.get("lowPrice"),
-            "mid": cm_prices.get("averageSellPrice"),
-            "high": None,
-            "avg1": cm_prices.get("avg1"),
-            "avg7": cm_prices.get("avg7"),
-            "avg30": cm_prices.get("avg30"),
-        }
-        rows.append(base)
-        if cm_prices.get("reverseHoloTrend") or cm_prices.get("reverseHoloSell"):
-            rows.append({
-                "card_id": card_id,
-                "source": "cardmarket",
-                "variant": "reverseHolofoil",
-                "snapshot_date": cm_date,
-                "currency": "EUR",
-                "market": cm_prices.get("reverseHoloTrend") or cm_prices.get("reverseHoloSell"),
-                "low": cm_prices.get("reverseHoloLow"),
-                "mid": cm_prices.get("reverseHoloSell"),
-                "high": None,
-                "avg1": cm_prices.get("reverseHoloAvg1"),
-                "avg7": cm_prices.get("reverseHoloAvg7"),
-                "avg30": cm_prices.get("reverseHoloAvg30"),
-            })
     return [r for r in rows if r.get("market") or r.get("mid") or r.get("low")]
 
 

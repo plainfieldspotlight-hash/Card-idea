@@ -21,13 +21,17 @@ const VARIANT_LABELS = {
 };
 const fmtVariant = (v) => VARIANT_LABELS[v] ?? v;
 
-const state = { page: 0, limit: 25, q: "", source: "", set: "", rarity: "",
+const state = { page: 0, limit: 25, q: "", set: "", rarity: "",
                 bucket: "", grading: "", company: "", grade: "",
-                minPrice: 1, sort: "predicted", total: 0,
+                // the app's focus floor: cards under $30 are bulk
+                minPrice: 30, sort: "predicted", total: 0,
+                // 0 = the default (7d) horizon; 30/60 switch the action lists
+                horizon: 0,
                 // money makers are the default focus; "0" is the explicit opt-out
                 chase: localStorage.getItem("pokeprice-chase") !== "0" };
 
 const chaseParam = () => (state.chase ? "&chase=1" : "");
+const horizonParam = () => (state.horizon ? `&horizon=${state.horizon}` : "");
 
 function el(tag, cls, text) {
   const node = document.createElement(tag);
@@ -122,7 +126,7 @@ function moverRow(item) {
   const title = el("div");
   title.append(el("b", null, item.name));
   name.append(title, el("span", "sub", `${item.set_name ?? ""} · ${fmtVariant(item.variant)} · ${item.source}`));
-  const price = el("span", "m-price", fmtMoney(item.price, item.source === "cardmarket" ? "EUR" : "USD"));
+  const price = el("span", "m-price", fmtMoney(item.price, "USD"));
   const val = el("span", `m-val delta ${deltaClass(item.predicted_return)}`, fmtPct(item.predicted_return));
   li.append(name, price, val);
   li.addEventListener("click", () => openDetail(item.card_id));
@@ -162,7 +166,7 @@ function buyRow(item) {
   const title = el("div");
   title.append(el("b", null, item.name));
   name.append(title, el("span", "sub",
-    `${item.set_name ?? "—"} · ${fmtMoney(item.price, item.source === "cardmarket" ? "EUR" : "USD")} · ${fmtVariant(item.variant)}`));
+    `${item.set_name ?? "—"} · ${fmtMoney(item.price, "USD")} · ${fmtVariant(item.variant)}`));
   const stack = el("div", "m-stack");
   const val = el("span", `m-val delta ${deltaClass(item.predicted_return)}`, fmtPct(item.predicted_return));
   if (item.predicted_low !== null && item.predicted_low !== undefined) {
@@ -192,7 +196,7 @@ function renderBuys(payload) {
   grid.replaceChildren();
   const crit = payload.criteria;
   $("#buys-criteria").textContent = payload.run
-    ? `P(up) ≥ ${(crit.min_prob * 100).toFixed(0)}% and predicted ≥ ${fmtPct(crit.min_return)} over ${payload.run.horizon_days}d · price tiers at face value (USD/EUR)`
+    ? `P(up) ≥ ${(crit.min_prob * 100).toFixed(0)}% and predicted ≥ ${fmtPct(crit.min_return)} over ${payload.run.horizon_days}d · price tiers in USD`
     : "";
   for (const tier of payload.tiers) {
     const box = el("div", "buy-tier");
@@ -598,16 +602,16 @@ function renderTable(payload) {
   body.replaceChildren();
   if (!payload.items.length) {
     const tr = el("tr");
-    const searching = state.q || state.set || state.rarity || state.source || state.bucket;
+    const searching = state.q || state.set || state.rarity || state.bucket;
     const message = state.grading === "graded"
       ? "No graded prices stored yet. Graded data comes from PriceCharting (set PRICECHARTING_TOKEN, see README), then run: python -m pokeprice graded --watchlist --collection"
       : searching && state.minPrice > 0
-      ? `No matches at your price floor — cheap cards are hidden by the "≥ ${state.minPrice.toFixed(2)}" filter. Try switching it to "Any price".`
+      ? `No matches at your price floor — cheaper cards are hidden by the "≥ $${state.minPrice}" filter. Try switching it to "Any price".`
       : searching
         ? "No cards match that search."
         : "No cards yet — run `pokeprice demo` for a demo market, `pokeprice ingest pokemon.zip` for your own data, or `pokeprice fetch` for live data.";
     const td = el("td", "empty-note", message);
-    td.colSpan = 8;
+    td.colSpan = 10;
     tr.append(td);
     body.append(tr);
   }
@@ -646,12 +650,16 @@ function renderTable(payload) {
     predTd.append(el("b", null, fmtPct(item.predicted_return)));
     if (item.predicted_low !== null && item.predicted_low !== undefined) {
       predTd.title = `range ${fmtPct(item.predicted_low)} … ${fmtPct(item.predicted_high)}`;
-      predTd.append(el("span", "sub", ` ${fmtPct(item.predicted_low)}…${fmtPct(item.predicted_high)}`));
+      predTd.append(el("span", "sub pred-range", `${fmtPct(item.predicted_low)}…${fmtPct(item.predicted_high)}`));
     }
+    const p30Td = el("td", `num delta ${deltaClass(item.predicted_30d)}`, fmtPct(item.predicted_30d));
+    p30Td.title = "Expected move over the next 30 days";
+    const p60Td = el("td", `num delta ${deltaClass(item.predicted_60d)}`, fmtPct(item.predicted_60d));
+    p60Td.title = "Expected move over the next 60 days";
     const probTd = el("td", "num", item.prob_up === null || item.prob_up === undefined ? "—" : (item.prob_up * 100).toFixed(0) + "%");
     probTd.title = "Probability the price is higher in 7 days";
 
-    tr.append(cardTd, listingTd, priceTd, chTd, sparkTd, predTd, probTd);
+    tr.append(cardTd, listingTd, priceTd, chTd, sparkTd, predTd, p30Td, p60Td, probTd);
     const open = () => openDetail(item.card_id);
     tr.addEventListener("click", open);
     tr.addEventListener("keydown", (e) => { if (e.key === "Enter") open(); });
@@ -666,7 +674,7 @@ function renderTable(payload) {
 
 async function loadTable() {
   const params = new URLSearchParams({
-    q: state.q, source: state.source, set_id: state.set, rarity: state.rarity,
+    q: state.q, set_id: state.set, rarity: state.rarity,
     chase: state.chase ? "1" : "0", bucket: state.bucket,
     grading: state.grading, company: state.company, grade: state.grade,
     sort: state.sort, min_price: String(state.minPrice),
@@ -927,19 +935,26 @@ async function openDetail(cardId) {
     title.append(el("b", null, `${l.source} · ${fmtVariant(l.variant)}`));
     chip.append(title);
     chip.append(el("div", null, `latest ${fmtMoney(l.latest_price, l.currency)} on ${l.latest_date ?? "—"}`));
-    if (l.prediction) {
-      const p = l.prediction;
-      const line = el("div", `delta ${deltaClass(p.predicted_return)}`);
-      line.append(el("b", null, fmtPct(p.predicted_return)));
-      line.append(document.createTextNode(
-        ` over ${p.horizon_days}d · P(up) ${(p.prob_up * 100).toFixed(0)}% · ${p.model_kind}`));
-      chip.append(line);
-      if (p.predicted_low !== null && p.predicted_low !== undefined) {
-        chip.append(el("div", "sub",
-          `range ${fmtPct(p.predicted_low)} … ${fmtPct(p.predicted_high)}` +
+    // one line per horizon (7d / 30d / 60d), newest run of each
+    const plist = (l.predictions && l.predictions.length)
+      ? l.predictions
+      : (l.prediction ? [l.prediction] : []);
+    if (plist.length) {
+      for (const p of plist) {
+        const line = el("div", `delta ${deltaClass(p.predicted_return)}`);
+        line.append(el("b", null, `${p.horizon_days}d ${fmtPct(p.predicted_return)}`));
+        let rest = ` · P(up) ${(p.prob_up * 100).toFixed(0)}%`;
+        if (p.predicted_low !== null && p.predicted_low !== undefined) {
+          rest += ` · range ${fmtPct(p.predicted_low)}…${fmtPct(p.predicted_high)}`;
+        }
+        line.append(document.createTextNode(rest));
+        line.title = `${p.model_kind} model · as of ${p.as_of}` +
           (p.prob_gain !== null && p.prob_gain !== undefined
-            ? ` · P(+10%) ${(p.prob_gain * 100).toFixed(0)}%` : "")));
+            ? ` · P(+10%) ${(p.prob_gain * 100).toFixed(0)}%` : "");
+        chip.append(line);
       }
+      // the max-bid calc stays on the default (7d) horizon
+      const p = l.prediction || plist[0];
       if (l.latest_price) {
         const maxBid = el("div", "sub maxbid");
         maxBid.dataset.price = l.latest_price;
@@ -1127,9 +1142,6 @@ $("#set-filter").addEventListener("change", (e) => {
 $("#rarity-filter").addEventListener("change", (e) => {
   state.rarity = e.target.value; state.page = 0; loadTable();
 });
-$("#source-filter").addEventListener("change", (e) => {
-  state.source = e.target.value; state.page = 0; loadTable();
-});
 $("#min-price").addEventListener("change", (e) => {
   state.minPrice = Number(e.target.value); state.page = 0; loadTable();
 });
@@ -1145,14 +1157,23 @@ document.addEventListener("keydown", (e) => {
 
 async function loadScopedSections() {
   const [movers, buys, deals] = await Promise.all([
-    getJSON(`/api/movers?limit=25&min_price=1${chaseParam()}`),
-    getJSON(`/api/buys?rank=worst_case&per_tier=25${chaseParam()}`),
-    getJSON(`/api/deals?limit=25${chaseParam()}`),
+    getJSON(`/api/movers?limit=25${chaseParam()}${horizonParam()}`),
+    getJSON(`/api/buys?rank=worst_case&per_tier=25${chaseParam()}${horizonParam()}`),
+    getJSON(`/api/deals?limit=25${chaseParam()}${horizonParam()}`),
   ]);
   renderMovers(movers);
   renderBuys(buys);
   renderDeals(deals);
 }
+
+document.querySelectorAll(".horizon-chips button[data-horizon]").forEach((chip) => {
+  chip.addEventListener("click", () => {
+    state.horizon = Number(chip.dataset.horizon);
+    document.querySelectorAll(".horizon-chips button[data-horizon]").forEach((b) =>
+      b.classList.toggle("on", b === chip));
+    loadScopedSections();
+  });
+});
 
 const chaseButton = $("#chase-toggle");
 function syncChaseButton() {

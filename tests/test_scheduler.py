@@ -1,6 +1,6 @@
 import pytest
 
-from pokeprice import db, demo, scheduler
+from pokeprice import config, db, demo, scheduler
 
 
 def test_parse_interval():
@@ -26,8 +26,17 @@ def test_run_cycle_fetch_train_predict(tmp_path, monkeypatch):
     status = scheduler.run_cycle(db_path, log=lambda *_: None)
     assert status["ok"] is True
     assert status["steps"]["fetch"]["snapshots"] > 0
-    assert status["steps"]["train"]["ok"] is True
-    assert status["steps"]["predict"]["model_kind"] == "gbm"
+    trained = {t["horizon_days"]: t for t in status["steps"]["train"]}
+    assert set(trained) == set(config.HORIZONS)
+    assert trained[config.DEFAULT_HORIZON_DAYS]["ok"] is True
+    predicted = {r["horizon_days"]: r["model_kind"]
+                 for r in status["steps"]["predict"]["runs"]}
+    assert set(predicted) == set(config.HORIZONS)
+    assert predicted[config.DEFAULT_HORIZON_DAYS] == "gbm"
+    # every horizon that trained successfully predicts with its own model
+    for horizon, t in trained.items():
+        if t["ok"]:
+            assert predicted[horizon] == "gbm"
 
     conn = db.connect(db_path)
     persisted = db.get_meta(conn, "auto_fetch_last")

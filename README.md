@@ -32,8 +32,11 @@ pokeprice ingest my_prices.csv --as-of 2026-07-01   # date for undated files
 Recognized formats:
 
 - **Pokemon TCG API / pokemon-tcg-data JSON** — card objects with
-  `tcgplayer.prices` (USD) and/or `cardmarket.prices` (EUR), as bare arrays,
-  `{"data": [...]}` envelopes, or per-set files with a `sets/en.json` index.
+  `tcgplayer.prices` (USD), as bare arrays, `{"data": [...]}` envelopes, or
+  per-set files with a `sets/en.json` index. The app is **USD-only**:
+  `cardmarket.prices` (EUR) blocks are ignored, and on first launch after
+  updating, any EUR price rows an older version collected are removed
+  automatically.
 - **CSV with fuzzy column mapping** — headers like `Card Name / name / title`,
   `Market Price / price / value`, `Set`, `Rarity`, `Date`, `Low/Mid/High` are
   matched case- and punctuation-insensitively; `$`/`€` signs are stripped. The
@@ -131,9 +134,18 @@ data — backfill more sets and more days, run auto-fetch daily, and check
 
 Every observation of a listing (a card × source × variant series) on a snapshot
 date becomes a feature row: trailing 1/7/30-day returns, volatility, bid–ask
-spread, Cardmarket's embedded 1/7/30-day averages (momentum that works even from
-a single dump), price level, rarity, set age, and history depth. The label is
-the forward return to the snapshot ~`horizon` days later (default 7).
+spread, embedded 1/7/30-day averages when the source provides them, price
+level, rarity, set age, and history depth. The label is the forward return to
+the snapshot ~`horizon` days later.
+
+**Three horizons.** A separate model is trained per look-ahead window — 7, 30,
+and 60 days by default (`POKEPRICE_HORIZONS`). `pokeprice train` trains all of
+them (`--horizon 30` for just one; horizons without enough history are skipped
+with a note), `pokeprice predict` stores one run per horizon, and the dashboard
+shows them side by side: 7d/30d/60d columns in the card table, all three in each
+card's detail panel, and a "Looking ahead" switch for the gainers/buys/deals
+lists. Action screens, alerts, and the report default to the 7-day run. Models
+live at `data/model.joblib` (7d) and `data/model-{30,60}d.joblib`.
 
 - **Model**: `HistGradientBoosting` regressor (expected return) + classifier
   (P(up)), with NaN-tolerant features and native categoricals.
@@ -145,8 +157,10 @@ the forward return to the snapshot ~`horizon` days later (default 7).
   can never resolve to the row's own date or later.
 - **Cold start**: with no trained model, `predict` falls back to a damped
   momentum heuristic, tagged `momentum` everywhere it surfaces.
-- Cards under `POKEPRICE_MIN_PRICE` (default $0.25) are excluded — percentage
-  moves on penny cards are bid/ask noise.
+- Cards under `POKEPRICE_MIN_PRICE` (default **$30**) are excluded from
+  training and predictions — the app focuses on cards where the dollars
+  matter; cheap bulk moves are bid/ask noise. Snapshots below the floor are
+  still stored, so lowering the floor later brings their history with it.
 
 On the demo market (a momentum-y random walk with hype spikes) the model reaches
 ~57% direction accuracy and ~0.27 Spearman IC on the holdout — it finds the
@@ -157,21 +171,18 @@ truth about your data.
 
 `pokeprice serve` gives you: stat tiles, top predicted gainers/losers,
 **high-confidence buys** bucketed into four price tiers (over $1,000 ·
-$500–$1,000 · $100–$500 · $100 or less — listings with P(up) ≥ 70% and a
+$500–$1,000 · $100–$500 · $30–$100 — listings with P(up) ≥ 70% and a
 predicted move ≥ +2%, tunable via `/api/buys?min_prob=&min_return=`), a
-searchable/sortable table (price, 7d change, 30d sparkline, predicted move,
-P(up)), and per-card detail with multi-series price history, crosshair tooltip,
-and a table view. Light and dark mode. When a card trades in both USD
-(TCGplayer) and EUR (Cardmarket), the chart indexes both series to 100 rather
-than mixing currencies on one axis.
+searchable/sortable table (price, 7d change, 30d sparkline, predicted 7d/30d/60d
+moves, P(up)), and per-card detail with multi-series price history, crosshair
+tooltip, and a table view. Light and dark mode. All prices are USD.
 
 ![Card detail](docs/detail-dark.png)
 
 **My collection** — track what you own: add listings from any card's detail
 panel, or bulk-**import a CSV** (TCGplayer collection export or a spreadsheet
 with name/set/quantity/paid columns). Totals — portfolio value, cost basis,
-unrealized gain, predicted 7-day move — are strict USD; EUR converts at the
-ECB daily rate (cached, offline-safe).
+unrealized gain, predicted 7-day move — are USD.
 
 **Watchlist & alerts** — star any card to track it without owning it. Alert
 rules run over everything you track after each auto-fetch (and via
