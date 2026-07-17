@@ -52,3 +52,44 @@ def test_run_cycle_survives_fetch_failure(tmp_path, monkeypatch):
     status = scheduler.run_cycle(tmp_path / "sched.db", log=lambda *_: None)
     assert status["ok"] is False
     assert "network down" in status["error"]
+
+
+def test_run_cycle_auto_backfill(tmp_path, monkeypatch):
+    from pokeprice import backfill as backfill_mod
+
+    def fake_api(conn, sets=None, progress=print):
+        result = demo.seed(conn, n_cards=12, days=40)
+        return result["cards"], result["snapshots"]
+
+    calls = []
+
+    def fake_backfill(conn, days=120, every=2, set_ids=None, end=None,
+                      progress=print):
+        calls.append(days)
+        return {"snapshots_added": 42, "days_processed": 7,
+                "groups_matched": 3, "products_matched": 100}
+
+    monkeypatch.setattr(scheduler.fetch, "fetch_api", fake_api)
+    monkeypatch.setattr(backfill_mod, "backfill", fake_backfill)
+    monkeypatch.setenv("POKEPRICE_MODEL", str(tmp_path / "m.joblib"))
+
+    # off by default: no backfill step
+    monkeypatch.setattr(config, "AUTO_BACKFILL_DAYS", 0)
+    status = scheduler.run_cycle(tmp_path / "a.db", log=lambda *_: None)
+    assert "backfill" not in status["steps"]
+    assert calls == []
+
+    monkeypatch.setattr(config, "AUTO_BACKFILL_DAYS", 365)
+    status = scheduler.run_cycle(tmp_path / "b.db", log=lambda *_: None)
+    assert status["steps"]["backfill"] == {
+        "ok": True, "snapshots_added": 42, "days_processed": 7}
+    assert calls == [365]
+
+    # a backfill hiccup must not sink the cycle
+    def broken(conn, **kw):
+        raise RuntimeError("tcgcsv down")
+
+    monkeypatch.setattr(backfill_mod, "backfill", broken)
+    status = scheduler.run_cycle(tmp_path / "c.db", log=lambda *_: None)
+    assert status["ok"] is True
+    assert status["steps"]["backfill"]["ok"] is False

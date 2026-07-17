@@ -8,6 +8,9 @@ services:
     environment:
       # uncomment to require a login (HTTP Basic, any username):
       # POKEPRICE_PASSWORD: change-me
+      # hosted mode: also pull a year of daily price history automatically
+      # (resumable; cheap once caught up):
+      # POKEPRICE_AUTO_BACKFILL: "365"
       # optional integrations:
       # POKEMONTCG_API_KEY: ""
       # EBAY_CLIENT_ID: ""

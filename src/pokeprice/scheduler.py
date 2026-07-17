@@ -52,6 +52,22 @@ def run_cycle(db_path: Path | str | None = None,
     try:
         cards, snaps = fetch.fetch_api(conn, sets=sets, progress=log)
         status["steps"]["fetch"] = {"ok": True, "cards": cards, "snapshots": snaps}
+        if config.AUTO_BACKFILL_DAYS > 0:
+            # hosted mode: keep deep history flowing without a human running
+            # `pokeprice backfill`. Resumable — caught-up days are skipped, and
+            # sets added since the last cycle get their history filled in.
+            from . import backfill as backfill_mod
+
+            try:
+                result = backfill_mod.backfill(
+                    conn, days=config.AUTO_BACKFILL_DAYS, progress=log)
+                status["steps"]["backfill"] = {
+                    "ok": True,
+                    "snapshots_added": result["snapshots_added"],
+                    "days_processed": result["days_processed"],
+                }
+            except Exception as exc:
+                status["steps"]["backfill"] = {"ok": False, "error": str(exc)}
         # money makers are the product focus: the self-updating models are
         # chase specialists unless POKEPRICE_CHASE=0. One model per horizon;
         # long horizons stay skipped until enough history accumulates.

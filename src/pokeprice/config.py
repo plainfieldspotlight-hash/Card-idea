@@ -52,6 +52,13 @@ DEFAULT_HORIZON_DAYS = int(os.environ.get("POKEPRICE_HORIZON", "7"))
 HORIZONS = tuple(int(h) for h in
                  os.environ.get("POKEPRICE_HORIZONS", "7,30,60").split(","))
 
+# When > 0, every auto-fetch cycle also runs a tcgcsv backfill this many days
+# deep. It's resumable and cheap once caught up (done days are skipped), and
+# it picks up history for newly added sets automatically. Off by default for
+# local installs (backfill is a deliberate, sizable download); hosted deploys
+# set POKEPRICE_AUTO_BACKFILL=365 so a fresh container fills itself.
+AUTO_BACKFILL_DAYS = int(os.environ.get("POKEPRICE_AUTO_BACKFILL", "0"))
+
 # "Big move" threshold for the P(gain >= X) classifier.
 BIG_GAIN = float(os.environ.get("POKEPRICE_BIG_GAIN", "0.10"))
 
