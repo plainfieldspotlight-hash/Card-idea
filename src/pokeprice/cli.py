@@ -346,7 +346,9 @@ def main(argv=None) -> int:
                    help="bulk-download the card CATALOG from pokemon-tcg-data "
                         "(metadata only — the dump has no prices)")
     p.add_argument("--all", action="store_true", help="crawl every card via the API")
-    p.add_argument("--max-pages", type=int, default=50)
+    p.add_argument("--max-pages", type=int, default=None,
+                   help="optional safety cap on API pages per query "
+                        "(default: none — fetch until the API says it's done)")
     p.set_defaults(func=cmd_fetch)
 
     p = sub.add_parser(

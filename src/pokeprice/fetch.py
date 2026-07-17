@@ -64,11 +64,16 @@ def fetch_api(
     conn: sqlite3.Connection,
     sets: list[str] | None = None,
     query: str | None = None,
-    max_pages: int = 50,
+    max_pages: int | None = None,
     progress=print,
+    session: requests.Session | None = None,
 ) -> tuple[int, int]:
-    """Fetch cards from the API and store today's snapshot. Returns (cards, snapshots)."""
-    session = _session()
+    """Fetch cards from the API and store today's snapshot. Returns (cards, snapshots).
+
+    Runs until the API reports every card delivered. max_pages is an optional
+    safety cap — it used to default to 50 (= 12,500 cards), which silently
+    truncated full crawls right around the 2020 sets."""
+    session = session or _session()
     queries: list[str | None]
     if sets:
         queries = [f"set.id:{s.strip()}" for s in sets]
@@ -80,7 +85,7 @@ def fetch_api(
     total_cards = total_snaps = 0
     for q in queries:
         page = 1
-        while page <= max_pages:
+        while max_pages is None or page <= max_pages:
             params = {"page": page, "pageSize": PAGE_SIZE}
             if q:
                 params["q"] = q
@@ -92,11 +97,15 @@ def fetch_api(
             snaps = [s for c in cards for s in tcg_json.snapshot_rows(c)]
             total_cards += db.upsert_cards(conn, rows)
             total_snaps += db.insert_snapshots(conn, snaps)
-            progress(f"  {q or 'all cards'}: page {page}, {len(cards)} cards "
-                     f"({total_snaps} snapshots so far)")
-            if page * PAGE_SIZE >= payload.get("totalCount", 0):
+            total_count = payload.get("totalCount", 0)
+            progress(f"  {q or 'all cards'}: {min(page * PAGE_SIZE, total_count)}"
+                     f"/{total_count} cards ({total_snaps} snapshots so far)")
+            if page * PAGE_SIZE >= total_count:
                 break
             page += 1
+            if max_pages is not None and page > max_pages:
+                progress(f"  {q or 'all cards'}: stopped at the --max-pages cap "
+                         f"with {total_count - (page - 1) * PAGE_SIZE} cards unfetched")
             time.sleep(0.3)  # be polite to the free API
     return total_cards, total_snaps
 
