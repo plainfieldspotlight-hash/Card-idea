@@ -947,9 +947,10 @@ function composeModalHtml(){
     '<div class="btnrow">' +
     '<button class="btn" data-a="copy-subject">Copy subject</button>' +
     '<button class="btn pri" data-a="copy-body">Copy body</button>' +
+    '<button class="btn" data-a="compose-gmail-web">Open in Gmail</button>' +
     '<button class="btn" data-a="compose-mailto">Open in mail app</button>' + gmail +
     '<button class="btn" data-a="modal-close">Done</button></div>' +
-    '<div class="mut small" style="margin-top:8px">Nothing auto-sends. Copy into Gmail or Messenger — the touch is already marked done.</div>';
+    '<div class="mut small" style="margin-top:8px">Nothing auto-sends. Open in Gmail pre-fills a compose window (name, card, price already filled) — review and hit Send there. The touch is already marked done.</div>';
 }
 
 function importModalHtml(){
@@ -1281,6 +1282,13 @@ document.addEventListener('click', e => {
       location.href = 'mailto:' + encodeURIComponent(to) +
         '?subject=' + encodeURIComponent(document.getElementById('c_subj').value) +
         '&body=' + encodeURIComponent(document.getElementById('c_body').value);
+      break; }
+    case 'compose-gmail-web': { const to = document.getElementById('c_to').value.trim();
+      const u = 'https://mail.google.com/mail/?view=cm&fs=1' +
+        (to ? '&to=' + encodeURIComponent(to) : '') +
+        '&su=' + encodeURIComponent(document.getElementById('c_subj').value) +
+        '&body=' + encodeURIComponent(document.getElementById('c_body').value);
+      if (!window.open(u, '_blank')) toast('Popup blocked — allow popups or use the Copy buttons');
       break; }
     case 'compose-gmail': { const to = document.getElementById('c_to').value.trim();
       const subject = document.getElementById('c_subj').value, body = document.getElementById('c_body').value;
