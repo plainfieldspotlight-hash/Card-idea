@@ -1,0 +1,1361 @@
+<!doctype html>
+<html lang="en">
+<head>
+<meta charset="utf-8">
+<meta name="viewport" content="width=device-width,initial-scale=1">
+<title>Plainfield Spotlight — Command Board</title>
+<!--
+  PLAINFIELD SPOTLIGHT — COMMAND BOARD
+  Single-file app. No frameworks, no build step. Open in any modern browser.
+  All data lives in localStorage under "psCommandBoard_v1" — use Data & Settings
+  to download a JSON backup.
+
+  Originally ran inside Claude Cowork where window.cowork.callMcpTool created
+  Gmail drafts; outside that environment the Copy buttons are primary and a
+  mailto: button is provided. The Gmail button only appears when the bridge exists.
+-->
+<style>
+:root{
+  --bg:#f5f6fa; --panel:#ffffff; --ink:#161825; --mut:#6b7085; --line:#e4e7f2;
+  --acc:#5b6cff; --accbg:#eceeff; --green:#178a4c; --greenbg:#e4f3ea;
+  --amber:#b45309; --amberbg:#fbeedd; --red:#d03030; --redbg:#fdeaea;
+}
+*{box-sizing:border-box}
+[hidden]{display:none!important}
+body{margin:0;background:var(--bg);color:var(--ink);
+  font:14px/1.45 -apple-system,BlinkMacSystemFont,"Segoe UI",Roboto,Helvetica,Arial,sans-serif}
+button{font:inherit;color:inherit}
+input,select,textarea{font:inherit;color:var(--ink);background:#fff;border:1px solid var(--line);
+  border-radius:8px;padding:7px 9px;width:100%}
+input:focus,select:focus,textarea:focus{outline:2px solid var(--accbg);border-color:var(--acc)}
+header{position:sticky;top:0;z-index:40;background:var(--panel);border-bottom:1px solid var(--line)}
+.hwrap{max-width:1280px;margin:0 auto;padding:14px 18px 0}
+.hrow{display:flex;gap:16px;align-items:center;flex-wrap:wrap}
+h1{margin:0;font-size:15px;font-weight:800;letter-spacing:.16em;text-transform:uppercase;white-space:nowrap}
+h1 b{color:var(--acc)}
+.catbox{position:relative;flex:1;min-width:240px;max-width:430px;margin-left:auto}
+.catbox input{border-radius:999px;padding:8px 15px}
+.catresults{position:absolute;top:calc(100% + 6px);right:0;width:min(420px,92vw);max-height:350px;
+  overflow:auto;background:#fff;border:1px solid var(--line);border-radius:12px;
+  box-shadow:0 14px 44px rgba(22,24,37,.16);z-index:60;padding:6px}
+.catrow{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:6px 10px;
+  font-size:12.5px;border-radius:8px}
+.catrow:hover{background:#f7f8fd}
+.catrow .cn{font-weight:600}
+.catrow .cn i{color:var(--mut);font-weight:400;font-size:11px}
+.st-open{color:var(--green);font-weight:800;letter-spacing:.06em;font-size:11px}
+.st-taken{color:var(--red);font-weight:600;font-size:12px;text-align:right}
+.st-hold{color:var(--amber);font-weight:600;font-size:12px;text-align:right}
+nav{display:flex;gap:22px;overflow-x:auto;margin-top:8px}
+.tab{background:none;border:none;border-bottom:2px solid transparent;padding:9px 2px;cursor:pointer;
+  font-size:11.5px;font-weight:800;letter-spacing:.1em;text-transform:uppercase;color:var(--mut);white-space:nowrap}
+.tab.on{color:var(--ink);border-bottom-color:var(--acc)}
+.tab .badge{display:inline-block;min-width:17px;text-align:center;background:var(--red);color:#fff;
+  border-radius:999px;padding:1px 5px;font-size:10px;margin-left:5px;letter-spacing:0}
+.tab .badge.b2{background:var(--acc)}
+main{max-width:1280px;margin:0 auto;padding:18px}
+.panel{background:var(--panel);border:1px solid var(--line);border-radius:12px;
+  box-shadow:0 1px 2px rgba(22,24,37,.04)}
+section.panel{padding:15px 18px;margin-bottom:16px}
+h2{margin:0 0 4px;font-size:11.5px;font-weight:800;letter-spacing:.12em;text-transform:uppercase}
+h2 .cnt{color:var(--mut);font-weight:700;margin-left:6px}
+.sub{color:var(--mut);font-size:12px;margin:0 0 10px}
+.intro{background:linear-gradient(105deg,#eef0ff,#fff);border:1px solid #dfe3ff;border-radius:12px;
+  padding:11px 15px;margin:10px 0 2px;display:flex;gap:14px;align-items:center;font-size:12.5px;color:#3c4059}
+.intro>div{flex:1}
+.kpis{display:flex;gap:8px;flex-wrap:wrap}
+.kpi{background:#fff;border:1px solid var(--line);border-radius:10px;padding:5px 12px;min-width:84px}
+.kpi b{display:block;font-size:14px}
+.kpi small{display:block;font-size:9px;font-weight:800;letter-spacing:.07em;text-transform:uppercase;color:var(--mut)}
+.kpi.good b{color:var(--green)}
+.kpi.alert b{color:var(--red)}
+.chip{display:inline-block;font-size:10px;font-weight:800;letter-spacing:.06em;text-transform:uppercase;
+  padding:2px 7px;border-radius:999px;white-space:nowrap}
+.chip.green{background:var(--greenbg);color:var(--green)}
+.chip.amber{background:var(--amberbg);color:var(--amber)}
+.chip.red{background:var(--redbg);color:var(--red)}
+.chip.acc{background:var(--accbg);color:var(--acc)}
+.chip.mutc{background:#eef0f6;color:var(--mut)}
+.chip.line{background:#fff;border:1px solid var(--line);color:var(--mut)}
+.btn{background:#fff;border:1px solid var(--line);border-radius:8px;padding:6px 12px;cursor:pointer;
+  font-size:12.5px;font-weight:700}
+.btn:hover{border-color:#c9cfe6}
+.btn.pri{background:var(--acc);border-color:var(--acc);color:#fff}
+.btn.dan{color:var(--red)}
+.btn.armed{background:var(--red)!important;border-color:var(--red)!important;color:#fff!important}
+.btn.mini{padding:3px 9px;font-size:11.5px;border-radius:7px;font-weight:600}
+.btn.ghost{border-style:dashed;color:var(--mut);width:100%}
+.iconbtn{background:none;border:none;cursor:pointer;font-size:17px;color:var(--mut);padding:2px 8px;border-radius:7px}
+.iconbtn:hover{background:#f1f2f9}
+.btnrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center}
+.grid{display:grid;grid-template-columns:repeat(auto-fill,minmax(355px,1fr));gap:16px}
+.cardp{padding:15px 16px 13px;display:flex;flex-direction:column;gap:10px}
+.cardhead{display:flex;justify-content:space-between;gap:8px;align-items:flex-start}
+.cname{font-size:14px;font-weight:800;letter-spacing:.08em;text-transform:uppercase}
+.cnote{color:var(--mut);font-size:11.5px;margin-top:2px}
+.menuwrap{position:relative}
+.menu{display:none;position:absolute;right:0;top:26px;background:#fff;border:1px solid var(--line);
+  border-radius:10px;box-shadow:0 12px 34px rgba(22,24,37,.16);z-index:30;min-width:190px;padding:5px}
+.menu.open{display:block}
+.menu button{display:block;width:100%;text-align:left;background:none;border:none;padding:7px 10px;
+  border-radius:7px;cursor:pointer;font-size:12.5px;font-weight:600}
+.menu button:hover{background:#f5f6fc}
+.menu button.dan{color:var(--red)}
+.fill{height:10px;border-radius:6px;background:#edeffa;overflow:hidden;display:flex}
+.fill .s{background:var(--acc)}
+.fill .h{background:#bcc3ff}
+.statrow{display:flex;gap:8px;flex-wrap:wrap;align-items:center;font-size:12px;color:var(--mut)}
+.statrow b{color:var(--ink)}
+.dates{display:flex;gap:10px;flex-wrap:wrap;align-items:flex-end}
+.dates label{font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;color:var(--mut)}
+.dates input{width:135px;padding:5px 7px;font-size:12px;display:block;margin-top:2px}
+.plist{display:flex;flex-direction:column;border-top:1px solid var(--line)}
+.prow{display:flex;justify-content:space-between;gap:10px;align-items:center;padding:7px 4px;
+  border-bottom:1px solid var(--line);cursor:pointer}
+.prow:hover{background:#f7f8fd}
+.pmain{min-width:0}
+.pmain .small{font-size:11px}
+.pchips{display:flex;gap:4px;flex-wrap:wrap;justify-content:flex-end}
+.mut{color:var(--mut)}
+.small{font-size:11.5px}
+.empty{color:var(--mut);font-size:12.5px;padding:8px 0}
+.qrow{display:flex;justify-content:space-between;gap:12px;align-items:center;padding:9px 2px;
+  border-top:1px solid var(--line);flex-wrap:wrap}
+.qrow:first-of-type{border-top:none}
+.qmain{min-width:220px;flex:1}
+.lrow{display:flex;gap:10px;align-items:center;padding:8px 4px;border-top:1px solid var(--line);flex-wrap:wrap}
+.lmain{flex:1;min-width:210px}
+.lrow select.minisel{width:auto;padding:3px 6px;font-size:11.5px;border-radius:7px}
+.toolbar{display:flex;gap:8px;flex-wrap:wrap;align-items:center;margin-bottom:8px}
+.toolbar input[type=text]{max-width:230px}
+.toolbar select{width:auto}
+.crow{border-top:1px solid var(--line)}
+.chead{display:flex;gap:10px;align-items:center;padding:9px 4px;cursor:pointer;flex-wrap:wrap}
+.chead:hover{background:#f7f8fd}
+.chead .who{flex:1;min-width:200px}
+.minibar{width:120px;height:7px;border-radius:5px;background:#edeffa;overflow:hidden}
+.minibar div{height:100%;background:var(--green)}
+.clist{padding:2px 4px 12px;display:grid;grid-template-columns:repeat(auto-fill,minmax(230px,1fr));gap:5px 16px}
+.clist label{display:flex;gap:8px;align-items:center;font-size:12.5px;cursor:pointer;padding:3px 4px;border-radius:6px}
+.clist label:hover{background:#f5f6fc}
+.clist input[type=checkbox]{width:auto}
+.clist label.done{color:var(--mut);text-decoration:line-through}
+.tbl{width:100%;border-collapse:collapse;font-size:12.5px}
+.tbl th{text-align:left;font-size:10px;letter-spacing:.09em;text-transform:uppercase;color:var(--mut);
+  padding:5px 8px;border-bottom:1px solid var(--line)}
+.tbl td{padding:6px 8px;border-bottom:1px solid #eef0f7}
+.tbl .num{text-align:right;font-variant-numeric:tabular-nums}
+.overlay{position:fixed;inset:0;background:rgba(22,24,37,.45);z-index:50;display:flex;
+  align-items:flex-start;justify-content:center;padding:38px 14px;overflow:auto}
+.modal{background:#fff;border-radius:14px;width:100%;max-width:620px;padding:20px 22px;
+  box-shadow:0 20px 60px rgba(22,24,37,.28)}
+.modal h3{margin:0 0 12px;font-size:12.5px;font-weight:800;letter-spacing:.11em;text-transform:uppercase}
+.fgrid{display:grid;grid-template-columns:1fr 1fr;gap:10px 14px}
+.fgrid .wide{grid-column:1/-1}
+.frow{margin-bottom:10px}
+.flab{display:block;font-size:10px;font-weight:800;letter-spacing:.08em;text-transform:uppercase;
+  color:var(--mut);margin-bottom:3px}
+.ckrow{display:flex;gap:18px;align-items:center;flex-wrap:wrap;padding-top:4px}
+.ckrow label{display:flex;gap:7px;align-items:center;font-size:12.5px;font-weight:600;cursor:pointer}
+.ckrow input{width:auto}
+.warnbox{background:var(--redbg);border:1px solid #f3bcbc;color:var(--red);border-radius:8px;
+  padding:9px 11px;font-size:12.5px;margin:10px 0;font-weight:600}
+.okbox{background:var(--greenbg);border:1px solid #bfe3cd;color:var(--green);border-radius:8px;
+  padding:9px 11px;font-size:12.5px;margin:10px 0;font-weight:600}
+.toast{position:fixed;left:50%;bottom:26px;transform:translateX(-50%);background:var(--ink);color:#fff;
+  padding:9px 17px;border-radius:999px;font-size:12.5px;font-weight:600;z-index:99;
+  box-shadow:0 10px 30px rgba(22,24,37,.35)}
+textarea{resize:vertical}
+.mono{font-family:ui-monospace,SFMono-Regular,Menlo,Consolas,monospace;font-size:11.5px}
+@media (max-width:640px){ .fgrid{grid-template-columns:1fr} .toolbar input[type=text]{max-width:none;flex:1} }
+</style>
+</head>
+<body>
+<header>
+  <div class="hwrap">
+    <div class="hrow">
+      <h1>Plainfield Spotlight <b>· Command Board</b></h1>
+      <div class="catbox">
+        <input id="catSearch" data-a="cat-search" placeholder="Check a category… (e.g. hvac, roofer, dentist)" autocomplete="off">
+        <div id="catResults" class="catresults" hidden></div>
+      </div>
+      <div id="kpis" class="kpis"></div>
+    </div>
+    <div id="introHost"></div>
+    <nav id="tabs"></nav>
+  </div>
+</header>
+<main id="view"></main>
+<div id="overlay" class="overlay" hidden><div class="modal" id="modalBox"></div></div>
+<div id="toast" class="toast" hidden></div>
+
+<script>
+'use strict';
+/* ================= CONSTANTS ================= */
+const LS_KEY = 'psCommandBoard_v1';
+// Cowork Gmail bridge tool id (verbatim from the original). Only used when
+// window.cowork.callMcpTool exists; everywhere else the Copy buttons are primary.
+const GMAIL_DRAFT = 'mcp__98803587-2ee9-4008-8c3f-a1a6a24f683e__create_draft';
+
+const TAG_ORDER = ['fb-ad','messenger','stroll','valpak','clipp','homepros','chamber','cold-email','referral','website','other'];
+const TAGS = {'fb-ad':'Facebook Ad', 'messenger':'Messenger DM', 'stroll':'Stroll', 'valpak':'Valpak', 'clipp':'Clipp',
+  'homepros':'HomePros', 'chamber':'Chamber list', 'cold-email':'Cold email', 'referral':'Referral',
+  'website':'Website', 'other':'Other'};
+
+// Source keys are internal attribution only. Competitor names (Stroll, Valpak,
+// Clipp, HomePros) must NEVER be interpolated into any outreach template below.
+function deriveTag(t){
+  t = (t || '').toLowerCase();
+  if (!t) return 'other';
+  if (t.includes('stroll')) return 'stroll';
+  if (t.includes('valpak')) return 'valpak';
+  if (t.includes('clipp')) return 'clipp';
+  if (t.includes('homepros') || t.includes('saveon')) return 'homepros';
+  if (t.includes('chamber')) return 'chamber';
+  if (t.includes('facebook') || t.includes('spotlight') || t.includes('messenger')) return 'fb-ad';
+  if (t.includes('referr')) return 'referral';
+  return 'other';
+}
+
+const SIZES = {
+  standard: [
+    {size:'3x2',                price:175,  units:1,  qr:false},
+    {size:'3x4',                price:350,  units:2,  qr:false},
+    {size:'6x4',                price:600,  units:4,  qr:true},
+    {size:'12x4',               price:1099, units:8,  qr:true},
+    {size:'Side Takeover',      price:2495, units:8,  qr:true},
+    {size:'Full Card Takeover', price:3995, units:16, qr:true}
+  ],
+  elite: [
+    {size:'Premium (large)', price:695, units:1, qr:true, cap:2},
+    {size:'Standard 3x4',    price:375, units:1, qr:true, cap:4}
+  ],
+  welcome: [
+    {size:'Welcome spot (3 summer drops)', price:350, units:1, qr:false}
+  ]
+};
+const CAPACITY = {standard:16, elite:6, welcome:10};
+const TYPE_LABEL = {standard:'9x12 · 5,000+ homes', elite:'Elite · ~600 homes', welcome:'New movers · 10 spots'};
+
+const CHECK_STEPS = [
+  ['pay',   'Payment received'],
+  ['dm',    'Post-payment DM sent (remorse killer + QR intro)'],
+  ['assets','Assets collected — logo, offer, contact info'],
+  ['qr',    'QR code created + tested'],
+  ['mock',  'Mockup designed'],
+  ['proof', 'Proof sent to client'],
+  ['appr',  'Proof approved (guarantee milestone)'],
+  ['mail',  'Printed + mailed'],
+  ['testi', 'Result / testimonial captured → proof library']
+];
+
+/* SEED_LEADS — the 171 competitor-mailer leads, extracted VERBATIM from the
+   original command-board reference. Compact keys: t=tier, n=mailer count,
+   b=business, c=category, s=source, f=first name, p=phone, a=area, g=angle
+   (internal pitch note — never appears in outreach). */
+const SEED_LEADS = [{"t":"HIGH","n":3,"b":"SPVB Inc - Great Lakes Center","c":"Medical/Wellness","s":"Stroll Lakes of Plainfield, Stroll Stonebridge, Stroll White Eagle","f":"","p":"","a":"Lakelands, Stonebridge/Aurora, White Eagle/Naperville","g":"Multi-Stroll: pitch Elite bundle (multiple Elite territories)."},{"t":"MED","n":3,"b":"Youngren's Inc","c":"Jewelry","s":"Stroll Stonebridge, Stroll White Eagle, Valpak","f":"","p":"","a":"Plainfield+Oswego+Aurora, Stonebridge/Aurora, White Eagle/Naperville","g":"Multi-Stroll: pitch Elite bundle (multiple Elite territories)."},{"t":"HIGH","n":2,"b":"A&E Roofing & Siding Inc","c":"Roofing/Siding","s":"Stroll Stonebridge, Stroll White Eagle","f":"","p":"","a":"Stonebridge/Aurora, White Eagle/Naperville","g":"Multi-Stroll: pitch Elite bundle (multiple Elite territories)."},{"t":"HIGH","n":2,"b":"Andersen Plumbing & Heating","c":"Plumbing/HVAC","s":"Stroll Stonebridge, Stroll White Eagle","f":"Chad","p":"(630) 554-8496","a":"700 Terry Ave, Aurora / 24 Oakhill Dr, Oswego","g":"Multi-Stroll: pitch Elite bundle (multiple Elite territories)."},{"t":"HIGH","n":2,"b":"Best Buy Interior Finishes","c":"Interior Finishes","s":"Stroll Stonebridge, Stroll White Eagle","f":"","p":"","a":"Stonebridge/Aurora, White Eagle/Naperville","g":"Multi-Stroll: pitch Elite bundle (multiple Elite territories)."},{"t":"HIGH","n":2,"b":"Gardiner Koch Weisberg & Wrona","c":"Law Firm","s":"Stroll Stonebridge, Stroll White Eagle","f":"","p":"","a":"Stonebridge/Aurora, White Eagle/Naperville","g":"Multi-Stroll: pitch Elite bundle (multiple Elite territories)."},{"t":"HIGH","n":2,"b":"HaloHeat Sauna Studios","c":"Wellness/Sauna","s":"Stroll Stonebridge, Stroll White Eagle","f":"","p":"","a":"Stonebridge/Aurora, White Eagle/Naperville","g":"Multi-Stroll: pitch Elite bundle (multiple Elite territories)."},{"t":"HIGH","n":2,"b":"LandMark Exteriors","c":"Exterior/Remodeling","s":"Stroll Stonebridge, Stroll White Eagle","f":"","p":"","a":"Stonebridge/Aurora, White Eagle/Naperville","g":"Multi-Stroll: pitch Elite bundle (multiple Elite territories)."},{"t":"HIGH","n":2,"b":"Lulu Head Spa","c":"Head Spa/Wellness","s":"Stroll Stonebridge, Stroll White Eagle","f":"","p":"","a":"Stonebridge/Aurora, White Eagle/Naperville","g":"Multi-Stroll: pitch Elite bundle (multiple Elite territories)."},{"t":"HIGH","n":2,"b":"Odyssey Home Remodeling","c":"Roofing/Siding/Windows","s":"HomePros/SaveOn, Valpak","f":"","p":"","a":"Naperville, Plainfield+Oswego+Aurora","g":"Valpak + HomePros. Already sold on direct mail. Pitch exclusivity."},{"t":"HIGH","n":2,"b":"Patriot Heating & Cooling Services","c":"HVAC","s":"Stroll Stonebridge, Stroll White Eagle","f":"","p":"","a":"Stonebridge/Aurora, White Eagle/Naperville","g":"Multi-Stroll: pitch Elite bundle (multiple Elite territories)."},{"t":"HIGH","n":2,"b":"Perfect Home Services","c":"HVAC + Plumbing","s":"HomePros/SaveOn, Valpak","f":"","p":"(630) 296-5899","a":"4341 Fox Valley Center Dr, Aurora","g":"Valpak + HomePros. Already sold on direct mail. Pitch exclusivity."},{"t":"MED","n":2,"b":"Paramount Theatre","c":"Entertainment/Theatre","s":"Stroll Stonebridge, Stroll White Eagle","f":"","p":"","a":"Stonebridge/Aurora, White Eagle/Naperville","g":"Multi-Stroll: pitch Elite bundle (multiple Elite territories)."},{"t":"LOW","n":2,"b":"Beardsley's Barber Shop Naperville","c":"Barber","s":"Clipp, Valpak","f":"","p":"","a":"Aurora, Naperville","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"LOW","n":2,"b":"Trendia Experience Center","c":"Home Design/Retail","s":"Stroll Stonebridge, Stroll White Eagle","f":"","p":"","a":"Stonebridge/Aurora, White Eagle/Naperville","g":"Multi-Stroll: pitch Elite bundle (multiple Elite territories)."},{"t":"HIGH","n":1,"b":"360 Family Dental","c":"Dentist","s":"Clipp","f":"","p":"","a":"Naperville","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"HIGH","n":1,"b":"A Touch Of Green","c":"Garden Center/Landscaping","s":"Clipp","f":"","p":"","a":"Homer Glen","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"HIGH","n":1,"b":"Advance Performance Pain & Wellness Center","c":"Wellness/Pain Mgmt","s":"Stroll Stonebridge","f":"","p":"","a":"Stonebridge/Aurora","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"Angie's Cleaning Service","c":"House Cleaning","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"Aurora Bright Dental","c":"Dentist","s":"Valpak","f":"","p":"","a":"Oswego","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"HIGH","n":1,"b":"BODY20","c":"Fitness/EMS Training","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"Baird & Warner - The Byrne Group","c":"Real Estate Agent","s":"Stroll Stonebridge","f":"","p":"","a":"Stonebridge/Aurora","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"Boundless Health and Wellness","c":"Wellness","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"Brickhaus Chimney Experts","c":"Chimney/Fireplace","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"CASA Kitchen and Bath","c":"Kitchen/Bath Remodel","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"CD One Price Cleaners","c":"Dry Cleaning","s":"Clipp","f":"","p":"","a":"Naperville","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"HIGH","n":1,"b":"Complete Home Contracting","c":"Remodeling","s":"HomePros/SaveOn","f":"","p":"(630) 518-2408","a":"1734 Delta Dr, Aurora","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"HIGH","n":1,"b":"D'Mode Design Interiors","c":"Interior Design","s":"Stroll Lakes of Plainfield","f":"","p":"","a":"Lakelands","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"DNA Athletics","c":"Fitness/Sports Training","s":"Stroll Lakes of Plainfield","f":"","p":"","a":"Lakelands","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"Dentistry By Design","c":"Dentist","s":"Stroll Stonebridge","f":"","p":"","a":"Stonebridge/Aurora","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"Designer Blinds Ltd","c":"Window Treatments","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"Dusting Divas Cleaning Services","c":"House Cleaning","s":"Stroll Stonebridge","f":"","p":"","a":"Stonebridge/Aurora","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"EDI Exterior Designers Inc","c":"Exterior/Siding/Windows/Roofing","s":"HomePros/SaveOn","f":"","p":"","a":"Plainfield","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"HIGH","n":1,"b":"Elite Restoration","c":"Roofing/Restoration","s":"HomePros/SaveOn","f":"","p":"(630) 427-7171","a":"24W500 Maple Ave #203A, Naperville","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"HIGH","n":1,"b":"FirstLight Home Care of Naperville","c":"Senior Home Care","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"Fish Window Cleaning","c":"Window Cleaning","s":"Valpak","f":"","p":"","a":"Plainfield+Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"HIGH","n":1,"b":"Four Seasons Heating & Air Conditioning","c":"HVAC","s":"Valpak","f":"","p":"","a":"Plainfield+Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"HIGH","n":1,"b":"Gentle Touch Home Assist LLC","c":"Senior Home Care","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"Green T Services","c":"Landscaping/Handyman","s":"HomePros/SaveOn","f":"","p":"","a":"Aurora","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"HIGH","n":1,"b":"Green T Services Lawn Care","c":"Lawn Care","s":"Valpak","f":"","p":"","a":"Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"HIGH","n":1,"b":"Harmonic Heating & Air Conditioning","c":"HVAC","s":"HomePros/SaveOn","f":"","p":"","a":"Naperville","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"HIGH","n":1,"b":"High Rise Chimney","c":"Chimney/Dryer Vent","s":"Valpak","f":"","p":"","a":"Plainfield+Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"HIGH","n":1,"b":"Home Werks","c":"Home Renovation","s":"HomePros/SaveOn","f":"","p":"(855) 820-1810","a":"1154 E Ogden, Naperville","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"HIGH","n":1,"b":"HomeSmart Realty - LaNita Cates","c":"Real Estate Agent","s":"HomePros/SaveOn","f":"","p":"","a":"Plainfield","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"HIGH","n":1,"b":"Jemm Professional Cleaning Services","c":"House Cleaning","s":"Stroll Lakes of Plainfield","f":"","p":"","a":"Lakelands","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"Journeymen Plumbing & Sewer LLC","c":"Plumbing","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"Kaplan Paving","c":"Brick/Paving","s":"Valpak","f":"","p":"","a":"Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"HIGH","n":1,"b":"Kathy Dames - RE/MAX Ultimate Professionals","c":"Real Estate Agent","s":"Stroll Lakes of Plainfield","f":"","p":"","a":"Lakelands","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"Koalafied Heating and Air","c":"HVAC","s":"Stroll Lakes of Plainfield","f":"","p":"","a":"Lakelands","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"Kwik Dry Chicago","c":"Carpet Cleaning","s":"Valpak","f":"","p":"","a":"Plainfield+Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"HIGH","n":1,"b":"LeafFilter","c":"Gutter Protection","s":"Valpak","f":"","p":"","a":"Plainfield+Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"HIGH","n":1,"b":"M&M Home Remodeling Services","c":"Remodeling","s":"Valpak","f":"","p":"","a":"Plainfield+Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"HIGH","n":1,"b":"MDLN Interiors","c":"Interior Design","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"MRS Carpet Cleaning","c":"Carpet Cleaning","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"MaidPro of Naperville","c":"House Cleaning","s":"HomePros/SaveOn","f":"","p":"","a":"Naperville","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"HIGH","n":1,"b":"Main Street Landscape Supply","c":"Landscaping Supply","s":"HomePros/SaveOn","f":"","p":"","a":"Plainfield","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"HIGH","n":1,"b":"Make A Dream Home","c":"Bathroom Remodel","s":"Valpak","f":"","p":"","a":"Plainfield+Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"HIGH","n":1,"b":"Midlife MD","c":"Medical/Wellness","s":"Valpak","f":"","p":"","a":"Plainfield+Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"HIGH","n":1,"b":"Murphy Landscape & Design","c":"Landscaping","s":"Stroll Stonebridge","f":"","p":"","a":"Stonebridge/Aurora","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"Naperville Roofing & Construction","c":"Roofing/Decks","s":"Clipp","f":"","p":"","a":"Naperville","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"HIGH","n":1,"b":"Next Door & Window","c":"Windows/Doors","s":"Valpak","f":"","p":"","a":"Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"HIGH","n":1,"b":"O'Brien Garage Doors","c":"Garage Doors","s":"Valpak","f":"","p":"","a":"Plainfield+Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"HIGH","n":1,"b":"Odyssey Roofing","c":"Roofing","s":"Clipp","f":"","p":"","a":"Naperville","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"HIGH","n":1,"b":"Olga's Cleaning Services","c":"House Cleaning","s":"Valpak","f":"","p":"","a":"Plainfield+Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"HIGH","n":1,"b":"P & R Builders","c":"Home Improvement/Remodeling","s":"HomePros/SaveOn","f":"","p":"","a":"Naperville","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"HIGH","n":1,"b":"Pinnacle Dental Group","c":"Dentist","s":"Valpak","f":"","p":"","a":"Plainfield","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"HIGH","n":1,"b":"Precision Air","c":"HVAC","s":"Stroll Lakes of Plainfield","f":"","p":"","a":"Lakelands","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"RPI-Remodeling Professionals Inc","c":"Remodeling","s":"HomePros/SaveOn","f":"","p":"(630) 306-2939","a":"25055 Madison St, Plainfield","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"HIGH","n":1,"b":"Remax Professionals Select - Joanne Baker","c":"Real Estate Agent","s":"Stroll Lakes of Plainfield","f":"","p":"","a":"Lakelands","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"Rosewood Home Improvement","c":"Home Improvement","s":"HomePros/SaveOn","f":"","p":"","a":"Naperville","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"HIGH","n":1,"b":"SellYourPad.com","c":"Real Estate Tech","s":"Valpak","f":"","p":"","a":"Plainfield","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"HIGH","n":1,"b":"Serotonin Centers of Naperville","c":"Wellness/Med Spa","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"Service 1 Inc Heating & A/C","c":"HVAC","s":"Valpak","f":"","p":"","a":"Plainfield+Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"HIGH","n":1,"b":"Smile Circle Dental","c":"Dentist","s":"Stroll Stonebridge","f":"","p":"","a":"Stonebridge/Aurora","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"Stec Roofing S&G Inc","c":"Roofing","s":"Stroll Stonebridge","f":"","p":"","a":"Stonebridge/Aurora","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"TR Miller Heating & Cooling","c":"HVAC","s":"Valpak","f":"","p":"","a":"Plainfield","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"HIGH","n":1,"b":"The Little Gym of Naperville","c":"Kids Fitness","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"HIGH","n":1,"b":"Top Air Solutions","c":"HVAC/Dryer Vent","s":"Valpak","f":"","p":"","a":"Plainfield+Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"HIGH","n":1,"b":"Two Maids & A Mop","c":"House Cleaning","s":"HomePros/SaveOn","f":"","p":"","a":"Naperville","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"HIGH","n":1,"b":"United Senior Services Inc","c":"Senior Care","s":"Valpak","f":"","p":"","a":"Plainfield+Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"HIGH","n":1,"b":"Weather Wise Heating & Cooling","c":"HVAC","s":"Valpak","f":"","p":"","a":"Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"HIGH","n":1,"b":"Window Works","c":"Windows/Doors/Siding","s":"HomePros/SaveOn","f":"","p":"","a":"Naperville","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"HIGH","n":1,"b":"WindowWorks (Chicago)","c":"Windows","s":"Valpak","f":"","p":"","a":"Plainfield+Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"HIGH","n":1,"b":"Zerorez Chicagoland","c":"Carpet Cleaning","s":"Valpak","f":"","p":"","a":"Plainfield+Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"MED","n":1,"b":"Alchemist Massage PLLC","c":"Massage Therapy","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"MED","n":1,"b":"Altitude Trampoline Park","c":"Entertainment","s":"Clipp","f":"","p":"","a":"Oswego","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Anderson Memorial Homes","c":"Funeral Services","s":"Stroll Lakes of Plainfield","f":"","p":"","a":"Lakelands","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"MED","n":1,"b":"Arrowhead Ale House","c":"Restaurant","s":"Clipp","f":"","p":"","a":"New Lenox","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Aurelios Plainfield","c":"Restaurant","s":"Valpak","f":"","p":"","a":"Plainfield","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"MED","n":1,"b":"Aurora Christmas Lighting","c":"Holiday Lighting","s":"Stroll Stonebridge","f":"","p":"","a":"Stonebridge/Aurora","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"MED","n":1,"b":"Beggars Pizza","c":"Restaurant","s":"Valpak","f":"","p":"","a":"Plainfield","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"MED","n":1,"b":"Blueberry Hill Breakfast Cafe - Oak Brook","c":"Restaurant","s":"Clipp","f":"","p":"","a":"Oak Brook","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Blueberry Hill Cafe - Aurora","c":"Restaurant","s":"Clipp","f":"","p":"","a":"Aurora","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Blueberry Hill Cafe - Homer Glen","c":"Restaurant","s":"Clipp","f":"","p":"","a":"Homer Glen","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Brasi's Pizzeria - Main Street","c":"Restaurant","s":"Clipp","f":"","p":"","a":"Lisle","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Browns Chicken Crest Hill","c":"Restaurant","s":"Valpak","f":"","p":"","a":"Plainfield","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"MED","n":1,"b":"Buttermilk","c":"Restaurant","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"MED","n":1,"b":"Canning Travel","c":"Travel Agency","s":"Stroll Stonebridge","f":"","p":"","a":"Stonebridge/Aurora","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"MED","n":1,"b":"Central Bark Fox Valley","c":"Dog Daycare","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"MED","n":1,"b":"Chasers Laser Tag","c":"Entertainment","s":"Clipp","f":"","p":"","a":"Naperville","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Chicago Lab Grown Diamonds","c":"Jewelry","s":"Stroll Lakes of Plainfield","f":"","p":"","a":"Lakelands","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"MED","n":1,"b":"Chicken Salad Chick Naperville","c":"Restaurant","s":"Valpak","f":"","p":"","a":"Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"MED","n":1,"b":"China Station","c":"Restaurant","s":"Valpak","f":"","p":"","a":"Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"MED","n":1,"b":"Draft Picks Naperville","c":"Restaurant/Bar","s":"Stroll Stonebridge","f":"","p":"","a":"Stonebridge/Aurora","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"MED","n":1,"b":"Expert Journeys Travel LLC","c":"Travel Agency","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"MED","n":1,"b":"FlagSource / JC Schultz Enterprises","c":"Flag/Signage","s":"Stroll Stonebridge","f":"","p":"","a":"Stonebridge/Aurora","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"MED","n":1,"b":"Goldy Locks","c":"Locksmith/Security","s":"Clipp","f":"","p":"","a":"Multi","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Hollywood Blvd Cinema","c":"Entertainment","s":"Clipp","f":"","p":"","a":"Woodridge","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"HopScotch & Vine","c":"Restaurant/Bar","s":"Stroll Lakes of Plainfield","f":"","p":"","a":"Lakelands","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"MED","n":1,"b":"Ichiban Ramen","c":"Restaurant","s":"Clipp","f":"","p":"","a":"Homer Glen","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Ichiddo Ramen","c":"Restaurant","s":"Clipp","f":"","p":"","a":"Naperville","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Jody's Hot Dogs","c":"Restaurant","s":"Clipp","f":"","p":"","a":"Joliet","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Lake Holiday Marina","c":"Marine/Boating","s":"Stroll Lakes of Plainfield","f":"","p":"","a":"Lakelands","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"MED","n":1,"b":"Latrice Murphy Design and Photography","c":"Photography","s":"Stroll Stonebridge","f":"","p":"","a":"Stonebridge/Aurora","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"MED","n":1,"b":"Marianna's","c":"Restaurant/Gaming","s":"Valpak","f":"","p":"","a":"Plainfield","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"MED","n":1,"b":"Matt Schimanski - Edward Jones","c":"Financial Advisor","s":"Stroll Lakes of Plainfield","f":"Matt","p":"(815) 254-5448","a":"5700 W Caton Farm Rd #102, Plainfield","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"MED","n":1,"b":"Matthew Erickson Jewelers","c":"Jewelry","s":"Clipp","f":"","p":"","a":"Aurora","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Mazala Pizza","c":"Restaurant","s":"Valpak","f":"","p":"","a":"Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"MED","n":1,"b":"Metro Grill & Bar","c":"Restaurant/Bar","s":"Valpak","f":"","p":"","a":"Plainfield","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"MED","n":1,"b":"Midwestern Adjusters","c":"Public Adjuster","s":"HomePros/SaveOn","f":"","p":"(630) 487-8833","a":"24W500 Maple Ave #106, Naperville","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Oasis Mexican Kitchen & Bar","c":"Restaurant","s":"Clipp","f":"","p":"","a":"Lockport","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Papa Magoos Bar & Grill","c":"Restaurant/Bar","s":"Clipp","f":"","p":"","a":"Shorewood","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Pepe's Mexican Restaurant - Oswego","c":"Restaurant","s":"Valpak","f":"","p":"","a":"Oswego","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"MED","n":1,"b":"Pepe's Mexican Restaurant- Homer Glen","c":"Restaurant","s":"Clipp","f":"","p":"","a":"Homer Glen","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Pepes Batavia","c":"Restaurant","s":"Valpak","f":"","p":"","a":"Oswego","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"MED","n":1,"b":"Piggy's Barbeque","c":"Restaurant","s":"Valpak","f":"","p":"","a":"Plainfield","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"MED","n":1,"b":"Piggy's Barbeque Wings and Fish","c":"Restaurant","s":"Stroll Lakes of Plainfield","f":"","p":"","a":"Lakelands","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"MED","n":1,"b":"Pizza Cucina","c":"Restaurant","s":"Clipp","f":"","p":"","a":"Oswego","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Pizza For U Joliet","c":"Restaurant","s":"Clipp","f":"","p":"","a":"Joliet","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Pop's Italian Beef & Sausage - Romeoville","c":"Restaurant","s":"Clipp","f":"","p":"","a":"Romeoville","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Pop's Italian Beef & Sausage - Shorewood","c":"Restaurant","s":"Clipp","f":"","p":"","a":"Shorewood","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Posh Banquets & Event Center","c":"Event/Banquet","s":"HomePros/SaveOn","f":"","p":"(815) 729-2000","a":"411 S Larkin Ave, Joliet","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Primrose School of East Aurora","c":"Daycare/Preschool","s":"Stroll Stonebridge","f":"","p":"","a":"Stonebridge/Aurora","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"MED","n":1,"b":"Robeks Fresh Juices & Smoothies","c":"Restaurant","s":"Clipp","f":"","p":"","a":"Naperville","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Rosati's (Naperville)","c":"Restaurant","s":"Valpak","f":"","p":"","a":"Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"MED","n":1,"b":"Rosati's Pizza","c":"Restaurant","s":"Clipp","f":"","p":"","a":"Aurora","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Rosati's Pizza - Milwaukee Bay View","c":"Restaurant","s":"Clipp","f":"","p":"","a":"Warrenville","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Rosati's Pizza Valrico","c":"Restaurant","s":"Clipp","f":"","p":"","a":"Warrenville","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Rosati's Pizza-Romeoville","c":"Restaurant","s":"Valpak","f":"","p":"","a":"Plainfield","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"MED","n":1,"b":"Scenthound South Naperville","c":"Pet Grooming","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"MED","n":1,"b":"Shinto Japanese Steakhouse","c":"Restaurant","s":"Clipp","f":"","p":"","a":"Naperville","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Skanda Jewelry","c":"Jewelry","s":"Stroll Stonebridge","f":"","p":"","a":"Stonebridge/Aurora","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"MED","n":1,"b":"The A's Club","c":"Event/Club","s":"Clipp","f":"","p":"","a":"Crest Hill","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"The Patio","c":"Restaurant","s":"Clipp","f":"","p":"","a":"Aurora","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Tollywood Lounge","c":"Restaurant/Bar","s":"Clipp","f":"","p":"","a":"Naperville","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"MED","n":1,"b":"Torro Mexican Restaurant","c":"Restaurant","s":"Clipp","f":"","p":"","a":"Lockport","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"LOW","n":1,"b":"ABC Therapy Clinics","c":"Pediatric Therapy","s":"Stroll Lakes of Plainfield","f":"","p":"","a":"Lakelands","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"LOW","n":1,"b":"Ace Endico","c":"Food Distributor","s":"Valpak","f":"","p":"","a":"Plainfield+Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"LOW","n":1,"b":"Allegretti's Bakery and Cafe","c":"Bakery/Cafe","s":"Clipp","f":"","p":"","a":"Lisle","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"LOW","n":1,"b":"Amish Furniture Gallery - Chicago","c":"Furniture","s":"Valpak","f":"","p":"","a":"Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"LOW","n":1,"b":"Apple Villa Cafe - Catering","c":"Cafe/Catering","s":"Clipp","f":"","p":"","a":"Batavia","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"LOW","n":1,"b":"Aurora Oil & Go","c":"Auto Repair","s":"Valpak","f":"","p":"","a":"Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"LOW","n":1,"b":"College HUNKS Hauling Junk & Moving","c":"Moving/Junk Removal","s":"Stroll Lakes of Plainfield","f":"","p":"","a":"Lakelands","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"LOW","n":1,"b":"Family Podiatry Center","c":"Podiatrist","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"LOW","n":1,"b":"Fantastic Sams","c":"Hair Salon","s":"Valpak","f":"","p":"","a":"Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"LOW","n":1,"b":"Fox Valley Park District","c":"Parks/Recreation","s":"Stroll Stonebridge","f":"","p":"","a":"Stonebridge/Aurora","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"LOW","n":1,"b":"Heart To Home Meals","c":"Meal Service","s":"Valpak","f":"","p":"","a":"Plainfield+Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"LOW","n":1,"b":"Jeff Buys Your House","c":"Homebuyer","s":"Valpak","f":"","p":"","a":"Plainfield+Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"LOW","n":1,"b":"La Tan","c":"Tanning Salon","s":"Valpak","f":"","p":"","a":"Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"LOW","n":1,"b":"LashBar","c":"Beauty/Lashes","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"LOW","n":1,"b":"Lobo Jiu-Jitsu","c":"Martial Arts","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"LOW","n":1,"b":"Merlin Complete Auto Care","c":"Auto Repair","s":"Valpak","f":"","p":"","a":"Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"LOW","n":1,"b":"Mike More Miles","c":"Auto Repair","s":"Valpak","f":"","p":"","a":"Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"LOW","n":1,"b":"New Lenox Auto Care","c":"Auto Repair","s":"Clipp","f":"","p":"","a":"New Lenox","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"LOW","n":1,"b":"Not Your Average Mold Guys","c":"Mold Remediation","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"LOW","n":1,"b":"Nothing Bundt Cakes - Naperville","c":"Bakery","s":"Clipp","f":"","p":"","a":"Naperville","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"LOW","n":1,"b":"Polish & Slavic Federal Credit Union","c":"Credit Union/Banking","s":"Stroll Lakes of Plainfield","f":"","p":"","a":"Lakelands","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"LOW","n":1,"b":"Reverence Behavioral Health Services","c":"Mental Health","s":"Stroll White Eagle","f":"","p":"","a":"White Eagle/Naperville","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."},{"t":"LOW","n":1,"b":"Tax Freedom Fighters","c":"Tax Prep","s":"Valpak","f":"","p":"","a":"Plainfield+Oswego+Aurora","g":"Valpak advertiser. Upgrade from 'one of 40' to 'only one'."},{"t":"LOW","n":1,"b":"Vic's Express Car Wash & Detail Center","c":"Car Wash","s":"Clipp","f":"","p":"","a":"Bolingbrook","g":"Magazine advertiser. Pitch postcard format + exclusivity."},{"t":"LOW","n":1,"b":"wendycityfaces","c":"Makeup/Beauty","s":"Stroll Stonebridge","f":"","p":"","a":"Stonebridge/Aurora","g":"Stroll advertiser. Lead with exclusivity + no monthly contract."}];
+function seedLeads(){
+  return SEED_LEADS.map(l => ({ id:uid(), tier:l.t||'MED', n:l.n||1, biz:l.b||'', first:l.f||'', cat:l.c||'',
+    email:'', phone:l.p||'', area:l.a||'', src:l.s||'', tag:deriveTag(l.s||''), angle:l.g||'',
+    stage:'prospected', notes:'', lastTouch:'' }));
+}
+
+function seedCards(){
+  const mk = (n,t,st,note) => ({id:uid(), name:n, type:t, status:st||'live', note:note||'',
+    lockDate:'', mailDate:'', placements:[], history:[]});
+  return [
+    mk('Plainfield','standard'),
+    mk('NE Plainfield','standard'),
+    mk('Oswego','standard'),
+    mk('Yorkville','standard'),
+    mk('Joliet','standard','live','Joliet Ravens Youth Football tie-in'),
+    mk('South Naperville','standard'),
+    mk('Lakelands Elite','elite'),
+    mk('Fox Mill Elite (St. Charles)','elite','building','~688 homes, HOA-confirmed'),
+    mk('Naperville Elite (White Eagle)','elite','building','Category reservations open'),
+    mk('Plainfield Summer Welcome Card','welcome','live','June · July · August — $350 flat, all 3 drops')
+  ];
+}
+
+/* ================= UTILS ================= */
+let _uidN = 0;
+function uid(){ return 'x' + Date.now().toString(36) + (_uidN++).toString(36) + Math.random().toString(36).slice(2,6); }
+function esc(s){ return String(s ?? '').replace(/[&<>"']/g, m => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[m])); }
+function norm(s){ return String(s || '').trim().toLowerCase(); }
+function money(n){ return '$' + (Math.round(+n) || 0).toLocaleString('en-US'); }
+function todayISO(){ const d = new Date(); return d.getFullYear() + '-' + String(d.getMonth()+1).padStart(2,'0') + '-' + String(d.getDate()).padStart(2,'0'); }
+function parseDate(s){ const p = String(s).split('-').map(Number); return new Date(p[0], (p[1]||1)-1, p[2]||1); }
+function daysUntil(s){ if(!s) return null; const t = new Date(); t.setHours(0,0,0,0); return Math.round((parseDate(s) - t) / 864e5); }
+function fmtShort(s){ return s ? parseDate(s).toLocaleDateString('en-US',{month:'short',day:'numeric'}) : ''; }
+function fmtLeft(ms){
+  if (ms <= 0) return 'expired';
+  const h = Math.floor(ms/36e5), m = Math.floor(ms % 36e5 / 6e4);
+  return h >= 1 ? h + 'h ' + m + 'm' : m + 'm';
+}
+let toastTimer = null;
+function toast(msg){
+  const t = document.getElementById('toast');
+  t.textContent = msg; t.hidden = false;
+  clearTimeout(toastTimer);
+  toastTimer = setTimeout(() => { t.hidden = true; }, 2000);
+}
+function copyText(text, msg){
+  const done = () => toast(msg || 'Copied to clipboard');
+  const fallback = () => {
+    const ta = document.createElement('textarea');
+    ta.value = text; ta.style.position = 'fixed'; ta.style.opacity = '0';
+    document.body.appendChild(ta); ta.select();
+    try { document.execCommand('copy'); done(); } catch(e){ toast('Copy failed — select and copy manually'); }
+    ta.remove();
+  };
+  if (navigator.clipboard && navigator.clipboard.writeText)
+    navigator.clipboard.writeText(text).then(done, fallback);
+  else fallback();
+}
+
+/* ================= STATE ================= */
+function blankTouches(){ return {results:false, midcycle:false, renewal:false}; }
+function blankCheck(){ return {pay:false, dm:false, assets:false, qr:false, mock:false, proof:false, appr:false, mail:false, testi:false}; }
+
+function fixPlacement(p){
+  p.id = p.id || uid();
+  p.status = p.status === 'hold' ? 'hold' : 'sold';
+  p.advertiser = p.advertiser || '';
+  p.first = p.first || '';
+  p.category = p.category || '';
+  p.email = p.email || '';
+  p.phone = p.phone || '';
+  p.size = p.size || '';
+  p.units = +p.units || 1;
+  p.price = +p.price || 0;
+  p.annual = !!p.annual;
+  p.qr = !!p.qr;
+  p.source = p.source ? (TAGS[p.source] ? p.source : deriveTag(p.source)) : '';
+  p.holdExpiry = p.holdExpiry || '';
+  p.touches = Object.assign(blankTouches(), p.touches || {});
+  p.renewedNext = !!p.renewedNext;
+  p.check = Object.assign(blankCheck(), p.check || {});
+  p.notes = p.notes || '';
+  return p;
+}
+function fixLead(l){
+  l.id = l.id || uid();
+  l.tier = ['HIGH','MED','LOW'].includes(l.tier) ? l.tier : 'MED';
+  l.n = +l.n || 0;
+  l.biz = l.biz || '';
+  l.first = l.first || '';
+  l.cat = l.cat || '';
+  l.email = l.email || '';
+  l.phone = l.phone || '';
+  l.area = l.area || '';
+  l.src = l.src || '';
+  l.tag = (l.tag && TAGS[l.tag]) ? l.tag : deriveTag(l.src);
+  l.angle = l.angle || '';
+  l.stage = ['prospected','pitched','negotiating'].includes(l.stage) ? l.stage : 'prospected';
+  l.notes = l.notes || '';
+  l.lastTouch = l.lastTouch || '';
+  return l;
+}
+// Tolerates older saves: fills defaults for settings, leads, tags, checklists, sources.
+function migrate(s){
+  s = (s && typeof s === 'object') ? s : {};
+  s.settings = Object.assign({renewalLeadDays:14, hideIntro:false}, s.settings || {});
+  s.settings.renewalLeadDays = Math.min(60, Math.max(1, +s.settings.renewalLeadDays || 14));
+  s.cards = Array.isArray(s.cards) ? s.cards : [];
+  s.leads = Array.isArray(s.leads) ? s.leads : seedLeads(); // older saves (pre-leads): seed the 171 once
+  for (const c of s.cards){
+    c.id = c.id || uid();
+    c.name = c.name || 'Card';
+    c.type = SIZES[c.type] ? c.type : 'standard';
+    c.status = c.status === 'building' ? 'building' : 'live';
+    c.note = c.note || '';
+    c.lockDate = c.lockDate || '';
+    c.mailDate = c.mailDate || '';
+    c.placements = Array.isArray(c.placements) ? c.placements : [];
+    c.placements.forEach(fixPlacement);
+    c.history = Array.isArray(c.history) ? c.history : [];
+    for (const h of c.history){
+      h.runLabel = h.runLabel || 'Past run';
+      h.placements = Array.isArray(h.placements) ? h.placements : [];
+      h.placements.forEach(p => { fixPlacement(p); p.renewDecision = ['renewed','lost'].includes(p.renewDecision) ? p.renewDecision : ''; });
+    }
+  }
+  s.leads.forEach(fixLead);
+  return s;
+}
+function freshState(){
+  return migrate({ settings:{renewalLeadDays:14, hideIntro:false}, cards:seedCards(), leads:seedLeads() });
+}
+function load(){
+  try {
+    const raw = localStorage.getItem(LS_KEY);
+    if (!raw) return freshState();
+    return migrate(JSON.parse(raw));
+  } catch(e){ return freshState(); }
+}
+function save(){
+  try { localStorage.setItem(LS_KEY, JSON.stringify(state)); }
+  catch(e){ toast('Warning: could not save (storage blocked/full)'); }
+}
+
+let state = load();
+save();
+
+/* ================= UI STATE (in-memory) ================= */
+let tab = 'cards';
+let modal = null;              // current modal descriptor or null
+let catQuery = '';
+let leadFilters = {q:'', stage:'', tag:''};
+const expanded = new Set();    // expanded client checklists
+
+/* ================= DERIVED ================= */
+function sizesFor(card){ return SIZES[card.type] || SIZES.standard; }
+function capOf(card){ return CAPACITY[card.type] || 16; }
+function checkKeys(p){ return CHECK_STEPS.map(s => s[0]).filter(k => k !== 'qr' || p.qr); }
+function checkDone(p){ return checkKeys(p).filter(k => p.check[k]).length; }
+function findCard(id){ return state.cards.find(c => c.id === id); }
+function findP(cardId, pid){ const c = findCard(cardId); return c ? {card:c, p:c.placements.find(x => x.id === pid)} : {}; }
+
+function renewQueue(){
+  const q = {holds:[], asks:[], results:[], mids:[], wins:[]};
+  const lead = state.settings.renewalLeadDays;
+  for (const c of state.cards){
+    const dtl = daysUntil(c.lockDate);
+    const dsm = c.mailDate ? -daysUntil(c.mailDate) : null;
+    for (const p of c.placements){
+      if (p.status === 'hold'){ q.holds.push({c, p}); continue; }
+      if (!p.annual && !p.renewedNext && !p.touches.renewal && dtl !== null && dtl <= lead) q.asks.push({c, p, dtl});
+      if (dsm !== null && dsm >= 2 && dsm <= 21 && !p.touches.results) q.results.push({c, p, dsm});
+      if (dsm !== null && dsm >= 22 && dsm <= 60 && !p.touches.midcycle) q.mids.push({c, p, dsm});
+    }
+    c.history.forEach((h, hi) => h.placements.forEach(p => { if (!p.renewDecision) q.wins.push({c, h, hi, p}); }));
+  }
+  q.total = q.holds.length + q.asks.length + q.results.length + q.mids.length + q.wins.length;
+  return q;
+}
+function clientList(){
+  const out = [];
+  for (const c of state.cards)
+    for (const p of c.placements)
+      if (p.status === 'sold') out.push({c, p});
+  return out;
+}
+function clientsIncomplete(){ return clientList().filter(x => checkDone(x.p) < checkKeys(x.p).length).length; }
+
+/* ================= EMAIL / DM TEMPLATES =================
+   Extracted VERBATIM from the original command-board reference (playbook rules
+   baked in: plain text, under 90 words, one ask, signed Kevin; subjects
+   lowercase, no punctuation; never "just checking in"; scarcity must be real).
+   Internal fields (source, tag, angle, competitor names) never appear here. */
+function firstName(p){ return (p.first || p.advertiser || 'there').split(' ')[0]; }
+function homesTxt(c){ return c.type==='standard' ? '5,000+' : (c.type==='elite' ? '600' : 'every new Plainfield homeowner’s'); }
+function niceDate(dstr){ if(!dstr) return ''; const d = new Date(dstr + 'T12:00:00'); return d.toLocaleDateString('en-US',{weekday:'long', month:'long', day:'numeric'}); }
+function monthOf(dstr){ if(!dstr) return 'next'; return new Date(dstr + 'T12:00:00').toLocaleDateString('en-US',{month:'long'}); }
+
+function tRenewal(c, p){
+  const f = firstName(p), cat = (p.category||'your category').toLowerCase(), sz = p.size;
+  const mo = monthOf(c.lockDate), lock = c.lockDate ? niceDate(c.lockDate) : 'soon';
+  return {
+    subject: ('your ' + cat.split(' ')[0] + ' slot ' + (c.lockDate ? mo.toLowerCase() : 'next print')).slice(0,60),
+    body: 'Hey ' + f + ',\n\n' + (c.lockDate ? (mo + ' print locks ' + lock) : 'The next print is coming up') + '. Your ' + cat + ' slot on the ' + c.name + ' card is yours until then — after that I have to open it up.\n\nTwo ways to go: same ' + sz + ' at ' + money(p.price) + ', or lock the category for the year so this is never a question.\n\nWhich way you leaning?\n\n— Kevin, Plainfield Spotlight'
+  };
+}
+function tResults(c, p){
+  const f = firstName(p), cat = (p.category||'your category').toLowerCase();
+  return {
+    subject: 'your card is in homes',
+    body: 'Hey ' + f + ',\n\nThe ' + c.name + ' card hit mailboxes this week — ' + homesTxt(c) + ' homes, and you’re the only ' + cat + ' on it.\n\nKeep a tally of QR scans and “saw you on the postcard” mentions. That data is gold for both of us when we talk about the next print.\n\nAnything landing yet?\n\n— Kevin, Plainfield Spotlight'
+  };
+}
+function tMid(c, p){
+  const f = firstName(p);
+  return {
+    subject: 'quick number for you',
+    body: 'Hey ' + f + ',\n\nMid-cycle note: the card sits on kitchen counters 2+ weeks, so calls usually keep trickling in past the first month.\n\nIf you’ve had QR scans or postcard mentions, reply with a rough count — I’ll line it up against the zone before the next print.\n\nWhat are you seeing?\n\n— Kevin, Plainfield Spotlight'
+  };
+}
+function tWinback(c, p){
+  const f = firstName(p), cat = (p.category||'your category').toLowerCase();
+  return {
+    subject: 'given up on the card',
+    body: f + ' — just need one clear answer.\n\nIs the ' + cat + ' slot on the ' + c.name + ' card something you want back, or should I release it for someone else?\n\nEither answer is fine. Just need a yes or no to update the zone map.\n\n— Kevin'
+  };
+}
+/* lead outreach — 4R rules, no competitor names ever */
+function tCold(l){
+  const cat = (l.cat||'business').toLowerCase();
+  return {
+    subject: ('question about ' + (l.biz||'your business')).toLowerCase().replace(/[^a-z0-9 &'’-]/g,'').slice(0,60),
+    body: 'Hey ' + (l.first||'there') + ',\n\nQuick one about ' + (l.biz||'your business') + '. I run the local Spotlight cards — one clean postcard to 5,000+ homes, capped at one ' + cat + ' per area so you’re never buried next to competitors.\n\nYou’re clearly already investing in reaching these neighborhoods. The difference here: the category is yours alone.\n\nWorth a look at the sample card and open areas? Reply yes and I’ll send both.\n\n— Kevin, Plainfield Spotlight'
+  };
+}
+function dmCold(l){
+  return 'Hey ' + (l.first||'there') + ' — quick one and I’ll get out of your hair. Curious: is ' + (l.biz||'your business') + ' trying to pull more local customers this season, or are you full up? No pitch — I only reach out when I see a real fit. — Kevin';
+}
+function dmHold(c, p){
+  const when = c.lockDate ? ('at 5pm ' + niceDate(c.lockDate)) : 'when the hold ends';
+  return 'Spot for ' + (p.category||'your category') + ' on the ' + c.name + ' card goes live ' + when + '. Lock or release?';
+}
+
+/* ================= RENDER: SHELL ================= */
+const viewEl = () => document.getElementById('view');
+
+function render(){
+  renderKPIs();
+  renderIntro();
+  renderTabs();
+  const v = viewEl();
+  if (tab === 'cards') v.innerHTML = renderCards();
+  else if (tab === 'renew') v.innerHTML = renderRenew();
+  else if (tab === 'leads') v.innerHTML = renderLeads();
+  else if (tab === 'clients') v.innerHTML = renderClients();
+  else v.innerHTML = renderData();
+}
+function renderKPIs(){
+  let sold = 0, held = 0;
+  for (const c of state.cards) for (const p of c.placements){
+    if (p.status === 'sold') sold += +p.price || 0; else held += +p.price || 0;
+  }
+  const q = renewQueue();
+  const expiring = q.holds.filter(({p}) => {
+    const ms = Date.parse(p.holdExpiry || '') - Date.now();
+    return isNaN(ms) || ms <= 0 || ms < 12 * 36e5;
+  }).length;
+  document.getElementById('kpis').innerHTML =
+    '<div class="kpi good"><b>' + money(sold) + '</b><small>sold this cycle</small></div>' +
+    '<div class="kpi"><b>' + money(held) + '</b><small>on hold</small></div>' +
+    '<div class="kpi' + (q.asks.length ? ' alert' : '') + '"><b>' + q.asks.length + '</b><small>renewals due</small></div>' +
+    '<div class="kpi' + (expiring ? ' alert' : '') + '"><b>' + q.holds.length + '</b><small>active holds</small></div>';
+}
+function renderIntro(){
+  document.getElementById('introHost').innerHTML = state.settings.hideIntro ? '' :
+    '<div class="intro"><div><b>How this runs:</b> <b>Leads</b> (your 171 competitor-mailer leads, pre-loaded) → ' +
+    'convert to a card → the <b>Clients</b> checklist tracks payment-to-mailbox → set each card’s <b>print lock</b> + ' +
+    '<b>mailed</b> dates and the <b>Renewal Engine</b> queues every touch and drafts the emails into Gmail. ' +
+    'Back up under Data &amp; Settings.</div>' +
+    '<button class="btn ghost" data-a="intro-hide" style="width:auto">Got it</button></div>';
+}
+function renderTabs(){
+  const rq = renewQueue().total;
+  const ci = clientsIncomplete();
+  const nl = state.leads.length;
+  const tabs = [
+    ['cards','Cards',''],
+    ['renew','Renewal Engine', rq ? '<span class="badge">' + rq + '</span>' : ''],
+    ['leads','Leads', nl ? '<span class="badge">' + nl + '</span>' : ''],
+    ['clients','Clients', ci ? '<span class="badge b2">' + ci + '</span>' : ''],
+    ['data','Data &amp; Settings','']
+  ];
+  document.getElementById('tabs').innerHTML = tabs.map(t =>
+    '<button class="tab' + (tab === t[0] ? ' on' : '') + '" data-a="tab" data-tab="' + t[0] + '">' + t[1] + t[2] + '</button>'
+  ).join('');
+}
+
+/* ================= RENDER: HEADER CATEGORY SEARCH ================= */
+function renderCatResults(){
+  const box = document.getElementById('catResults');
+  const q = norm(catQuery);
+  if (!q){ box.hidden = true; box.innerHTML = ''; return; }
+  const rows = state.cards.map(c => {
+    const hit = c.placements.find(p => norm(p.category).includes(q));
+    let st;
+    if (!hit) st = '<span class="st-open">OPEN</span>';
+    else if (hit.status === 'hold') st = '<span class="st-hold">on hold — ' + esc(hit.advertiser) + '</span>';
+    else st = '<span class="st-taken">taken by ' + esc(hit.advertiser) + '</span>';
+    return '<div class="catrow"><span class="cn">' + esc(c.name) +
+      (c.status === 'building' ? ' <i>(building)</i>' : '') + '</span>' + st + '</div>';
+  });
+  box.innerHTML = '<div class="catrow" style="border-bottom:1px solid var(--line);border-radius:0">' +
+    '<span class="mut small">“' + esc(catQuery) + '” availability</span></div>' + rows.join('');
+  box.hidden = false;
+}
+
+/* ================= RENDER: CARDS TAB ================= */
+function chipHold(p){
+  const ms = Date.parse(p.holdExpiry || '') - Date.now();
+  return isNaN(ms) || ms <= 0
+    ? '<span class="chip red">hold expired</span>'
+    : '<span class="chip amber">hold ' + fmtLeft(ms) + '</span>';
+}
+function pRow(c, p){
+  const chips = [];
+  if (p.status === 'hold') chips.push(chipHold(p));
+  else chips.push('<span class="chip green">sold</span>');
+  if (p.annual) chips.push('<span class="chip acc">annual</span>');
+  if (p.renewedNext) chips.push('<span class="chip green">renewed</span>');
+  if (p.status === 'sold'){
+    const total = checkKeys(p).length, done = checkDone(p);
+    chips.push('<span class="chip ' + (done === total ? 'green' : 'mutc') + '">' + done + '/' + total + '</span>');
+  }
+  return '<div class="prow" data-a="spot-open" data-card="' + c.id + '" data-id="' + p.id + '">' +
+    '<div class="pmain"><b>' + esc(p.advertiser) + '</b> <span class="mut">· ' + esc(p.category) + '</span>' +
+    '<div class="mut small">' + esc(p.size) + ' · ' + money(p.price) +
+    (p.source ? ' · ' + esc(TAGS[p.source] || p.source) : '') + (p.qr ? ' · QR' : '') + '</div></div>' +
+    '<div class="pchips">' + chips.join('') + '</div></div>';
+}
+function cardPanel(c){
+  const cap = capOf(c);
+  const sold = c.placements.filter(p => p.status === 'sold');
+  const held = c.placements.filter(p => p.status === 'hold');
+  const soldU = sold.reduce((a,p) => a + (p.units||1), 0);
+  const heldU = held.reduce((a,p) => a + (p.units||1), 0);
+  const soldR = sold.reduce((a,p) => a + (+p.price||0), 0);
+  const heldR = held.reduce((a,p) => a + (+p.price||0), 0);
+  const sPct = Math.min(100, soldU / cap * 100);
+  const hPct = Math.min(100 - sPct, heldU / cap * 100);
+  const dtl = daysUntil(c.lockDate);
+  let lockChip = '';
+  if (dtl !== null)
+    lockChip = dtl < 0 ? '<span class="chip red">lock passed</span>'
+      : '<span class="chip ' + (dtl <= 7 ? 'red' : 'acc') + '">locks in ' + dtl + 'd</span>';
+  const typeChip = '<span class="chip ' + (c.type === 'standard' ? 'line' : 'acc') + '">' + TYPE_LABEL[c.type] + '</span>' +
+    (c.status === 'building' ? ' <span class="chip amber">building</span>' : '');
+  const rows = c.placements.map(p => pRow(c, p)).join('');
+  const histNote = c.history.length
+    ? '<div class="mut small">' + c.history.length + ' archived run' + (c.history.length > 1 ? 's' : '') +
+      ' · ' + c.history.reduce((a,h) => a + h.placements.length, 0) + ' win-back candidate spots</div>' : '';
+  return '<div class="panel cardp">' +
+    '<div class="cardhead"><div><div class="cname">' + esc(c.name) + ' ' + typeChip + '</div>' +
+      '<div class="cnote">' + esc(c.note) + '</div></div>' +
+      '<div class="menuwrap"><button class="iconbtn" data-a="card-menu" aria-label="Card menu">⋯</button>' +
+      '<div class="menu">' +
+        '<button data-a="card-edit" data-card="' + c.id + '">Edit card</button>' +
+        '<button data-a="card-next" data-card="' + c.id + '">Start next run (archive)</button>' +
+        '<button data-a="card-status" data-card="' + c.id + '">Mark ' + (c.status === 'live' ? 'building' : 'live') + '</button>' +
+        '<button class="dan" data-a="card-del" data-card="' + c.id + '" data-confirm>Delete card</button>' +
+      '</div></div></div>' +
+    '<div class="fill"><div class="s" style="width:' + sPct + '%"></div><div class="h" style="width:' + hPct + '%"></div></div>' +
+    '<div class="statrow"><b>' + (soldU + heldU) + '/' + cap + '</b> units · <b>' + money(soldR) + '</b> sold' +
+      (heldR ? ' · <span style="color:var(--amber)"><b>' + money(heldR) + '</b> held</span>' : '') + '</div>' +
+    '<div class="dates">' +
+      '<div><label>Print lock</label><input type="date" data-a="card-lock" data-card="' + c.id + '" value="' + esc(c.lockDate) + '"></div>' +
+      '<div><label>Mailed</label><input type="date" data-a="card-mail" data-card="' + c.id + '" value="' + esc(c.mailDate) + '"></div>' +
+      '<div style="padding-bottom:5px">' + lockChip + '</div></div>' +
+    '<div class="plist">' + (rows || '<div class="empty">No spots yet — the whole card is open.</div>') + '</div>' +
+    histNote +
+    '<button class="btn ghost" data-a="spot-add" data-card="' + c.id + '">+ Add spot</button>' +
+    '</div>';
+}
+function renderCards(){
+  return '<div class="grid">' + state.cards.map(cardPanel).join('') +
+    '<div class="panel cardp" style="justify-content:center;align-items:center;min-height:170px">' +
+    '<button class="btn" data-a="card-add">+ Add card</button>' +
+    '<div class="mut small" style="text-align:center">New zone, Elite build-out,<br>or seasonal card</div></div>' +
+    '</div>';
+}
+
+/* ================= RENDER: RENEWAL ENGINE ================= */
+function qSection(title, sub, rows, emptyMsg){
+  return '<section class="panel"><h2>' + title + '<span class="cnt">' + rows.length + '</span></h2>' +
+    '<p class="sub">' + sub + '</p>' +
+    (rows.length ? rows.join('') : '<div class="empty">' + emptyMsg + '</div>') + '</section>';
+}
+function renderRenew(){
+  const q = renewQueue();
+  const holds = q.holds.map(({c, p}) =>
+    '<div class="qrow"><div class="qmain"><b>' + esc(p.advertiser) + '</b> <span class="mut">· ' + esc(p.category) + ' · ' + esc(c.name) + '</span>' +
+    '<div class="mut small">' + esc(p.size) + ' · ' + money(p.price) + ' · ' + chipHold(p) + '</div></div>' +
+    '<div class="btnrow"><button class="btn mini" data-a="hold-dm" data-card="' + c.id + '" data-id="' + p.id + '">Copy lock-or-release DM</button>' +
+    '<button class="btn mini pri" data-a="hold-sold" data-card="' + c.id + '" data-id="' + p.id + '">Mark sold</button>' +
+    '<button class="btn mini dan" data-a="hold-release" data-card="' + c.id + '" data-id="' + p.id + '" data-confirm>Release</button></div></div>');
+  const asks = q.asks.map(({c, p, dtl}) =>
+    '<div class="qrow"><div class="qmain"><b>' + esc(p.advertiser) + '</b> <span class="mut">· ' + esc(p.category) + ' · ' + esc(c.name) + '</span>' +
+    '<div class="mut small">' + esc(p.size) + ' · ' + money(p.price) + ' · ' +
+    (dtl < 0 ? '<span class="chip red">lock passed</span>' : '<span class="chip ' + (dtl <= 7 ? 'red' : 'acc') + '">locks in ' + dtl + 'd</span>') + '</div></div>' +
+    '<div class="btnrow"><button class="btn mini pri" data-a="ask-draft" data-card="' + c.id + '" data-id="' + p.id + '">Draft renewal email</button>' +
+    '<button class="btn mini" data-a="ask-mark" data-card="' + c.id + '" data-id="' + p.id + '">Mark renewed</button></div></div>');
+  const results = q.results.map(({c, p, dsm}) =>
+    '<div class="qrow"><div class="qmain"><b>' + esc(p.advertiser) + '</b> <span class="mut">· ' + esc(p.category) + ' · ' + esc(c.name) + '</span>' +
+    '<div class="mut small">mailed ' + dsm + 'd ago · untouched since print</div></div>' +
+    '<div class="btnrow"><button class="btn mini pri" data-a="res-draft" data-card="' + c.id + '" data-id="' + p.id + '">Draft results email</button></div></div>');
+  const mids = q.mids.map(({c, p, dsm}) =>
+    '<div class="qrow"><div class="qmain"><b>' + esc(p.advertiser) + '</b> <span class="mut">· ' + esc(p.category) + ' · ' + esc(c.name) + '</span>' +
+    '<div class="mut small">mailed ' + dsm + 'd ago · mid-cycle window</div></div>' +
+    '<div class="btnrow"><button class="btn mini pri" data-a="mid-draft" data-card="' + c.id + '" data-id="' + p.id + '">Draft mid-cycle email</button></div></div>');
+  const wins = q.wins.map(({c, hi, p}) =>
+    '<div class="qrow"><div class="qmain"><b>' + esc(p.advertiser) + '</b> <span class="mut">· ' + esc(p.category) + ' · ' + esc(c.name) + '</span>' +
+    '<div class="mut small">' + esc(c.history[hi].runLabel) + ' · was ' + esc(p.size) + ' at ' + money(p.price) + '</div></div>' +
+    '<div class="btnrow"><button class="btn mini pri" data-a="wb-draft" data-card="' + c.id + '" data-run="' + hi + '" data-id="' + p.id + '">Draft magic email</button>' +
+    '<button class="btn mini" data-a="wb-back" data-card="' + c.id + '" data-run="' + hi + '" data-id="' + p.id + '">Came back</button>' +
+    '<button class="btn mini dan" data-a="wb-lost" data-card="' + c.id + '" data-run="' + hi + '" data-id="' + p.id + '" data-confirm>Lost</button></div></div>');
+  return '<p class="sub" style="margin:2px 0 14px">Work top to bottom. Every draft is copy-and-send — nothing auto-sends, and creating a draft marks that touch done.</p>' +
+    qSection('1 · Holds — lock or release', 'Every hold on every card, with its countdown. Holds only resolve one way: lock or release.', holds, 'No open holds.') +
+    qSection('2 · Renewal asks', 'Sold, not annual, not yet renewed or asked, inside ' + state.settings.renewalLeadDays + ' days of print lock.', asks, 'Nobody needs a renewal ask right now.') +
+    qSection('3 · Post-print results touch', 'Card mailed 2–21 days ago and this client hasn’t heard from you since it landed.', results, 'Everyone recently mailed has been touched.') +
+    qSection('4 · Mid-cycle value touch', 'Card mailed 22–60 days ago. Ask for a rough scan/mention count — proof for the renewal ask.', mids, 'No one in the mid-cycle window.') +
+    qSection('5 · Win-backs', 'Archived spots with no decision yet. One clear question: want it back, or release it?', wins, 'No undecided win-backs.');
+}
+
+/* ================= RENDER: LEADS ================= */
+const TIER_RANK = {HIGH:0, MED:1, LOW:2};
+function filteredLeads(){
+  const q = norm(leadFilters.q);
+  return state.leads.filter(l => {
+    if (leadFilters.stage && l.stage !== leadFilters.stage) return false;
+    if (leadFilters.tag && l.tag !== leadFilters.tag) return false;
+    if (q){
+      const hay = [l.biz, l.first, l.cat, l.area, l.src, l.notes, l.angle, l.email, l.phone].join(' ').toLowerCase();
+      if (!hay.includes(q)) return false;
+    }
+    return true;
+  }).sort((a,b) => (TIER_RANK[a.tier] - TIER_RANK[b.tier]) || (b.n - a.n) || a.biz.localeCompare(b.biz));
+}
+function leadRowsHtml(){
+  const list = filteredLeads();
+  if (!state.leads.length)
+    return '<div class="empty">No leads left — every one was converted or cleared. Use <b>Paste import</b> (one lead per line, comma or tab separated) or <b>+ Add lead</b>.</div>';
+  if (!list.length) return '<div class="empty">No leads match these filters.</div>';
+  return list.map(l => {
+    const tierChip = '<span class="chip ' + (l.tier === 'HIGH' ? 'green' : l.tier === 'MED' ? 'amber' : 'mutc') + '">' + l.tier + '</span>';
+    const meta = [l.cat, l.area, l.n ? l.n + ' mailer' + (l.n > 1 ? 's' : '') : '']
+      .filter(Boolean).map(esc).join(' · ');
+    return '<div class="lrow">' + tierChip +
+      '<div class="lmain"><b>' + esc(l.biz) + '</b>' + (l.first ? ' <span class="mut">(' + esc(l.first) + ')</span>' : '') +
+      ' <span class="mut small">' + meta + '</span>' +
+      (l.angle ? '<div class="mut small">∠ ' + esc(l.angle) + '</div>' : '') +
+      (l.lastTouch ? '<div class="mut small">last touch ' + esc(fmtShort(l.lastTouch)) + '</div>' : '') + '</div>' +
+      '<span class="chip line">' + esc(TAGS[l.tag] || l.tag) + '</span>' +
+      '<select class="minisel" data-a="lead-stage" data-id="' + l.id + '">' +
+        ['prospected','pitched','negotiating'].map(s => '<option value="' + s + '"' + (l.stage === s ? ' selected' : '') + '>' + s + '</option>').join('') +
+      '</select>' +
+      '<span class="btnrow">' +
+      '<button class="btn mini" data-a="lead-cold" data-id="' + l.id + '">Draft cold email</button>' +
+      '<button class="btn mini" data-a="lead-dm" data-id="' + l.id + '">Copy cold DM</button>' +
+      '<button class="btn mini pri" data-a="lead-convert" data-id="' + l.id + '">→ Card</button>' +
+      '<button class="btn mini" data-a="lead-edit" data-id="' + l.id + '">Edit</button>' +
+      '<button class="btn mini dan" data-a="lead-del" data-id="' + l.id + '" data-confirm>Del</button>' +
+      '</span></div>';
+  }).join('');
+}
+function leadCountText(){
+  return 'Showing ' + filteredLeads().length + ' of ' + state.leads.length + ' leads';
+}
+function renderLeads(){
+  const stages = ['prospected','pitched','negotiating'];
+  const stageCnt = s => state.leads.filter(l => l.stage === s).length;
+  const tagCnt = t => state.leads.filter(l => l.tag === t).length;
+  return '<section class="panel">' +
+    '<div class="toolbar">' +
+      '<input type="text" data-a="leads-q" placeholder="Filter leads…" value="' + esc(leadFilters.q) + '">' +
+      '<select data-a="leads-stagef"><option value="">All stages (' + state.leads.length + ')</option>' +
+        stages.map(s => '<option value="' + s + '"' + (leadFilters.stage === s ? ' selected' : '') + '>' + s + ' (' + stageCnt(s) + ')</option>').join('') + '</select>' +
+      '<select data-a="leads-tagf"><option value="">All sources (' + state.leads.length + ')</option>' +
+        TAG_ORDER.map(t => '<option value="' + t + '"' + (leadFilters.tag === t ? ' selected' : '') + '>' + TAGS[t] + ' (' + tagCnt(t) + ')</option>').join('') + '</select>' +
+      '<span class="mut small" id="leadCount">' + leadCountText() + '</span>' +
+      '<span style="margin-left:auto" class="btnrow">' +
+        '<button class="btn mini" data-a="import-open">Paste import</button>' +
+        '<button class="btn mini pri" data-a="lead-add">+ Add lead</button></span>' +
+    '</div>' +
+    '<div id="leadRows">' + leadRowsHtml() + '</div>' +
+    '</section>';
+}
+
+/* ================= RENDER: CLIENTS ================= */
+function renderClients(){
+  const groups = state.cards.map(c => {
+    const sold = c.placements.filter(p => p.status === 'sold');
+    if (!sold.length) return '';
+    const rows = sold.map(p => {
+      const keys = checkKeys(p), done = checkDone(p), total = keys.length;
+      const open = expanded.has(p.id);
+      const list = CHECK_STEPS.filter(s => keys.includes(s[0])).map(s =>
+        '<label class="' + (p.check[s[0]] ? 'done' : '') + '"><input type="checkbox" data-a="check-item" data-card="' + c.id +
+        '" data-id="' + p.id + '" data-k="' + s[0] + '"' + (p.check[s[0]] ? ' checked' : '') + '> ' + s[1] + '</label>').join('');
+      return '<div class="crow"><div class="chead" data-a="client-toggle" data-id="' + p.id + '">' +
+        '<div class="who"><b>' + esc(p.advertiser) + '</b> <span class="mut">· ' + esc(p.category) + ' · ' + esc(p.size) + '</span></div>' +
+        '<div class="minibar"><div style="width:' + (done / total * 100) + '%"></div></div>' +
+        '<span class="chip ' + (done === total ? 'green' : 'mutc') + '">' + done + '/' + total + '</span>' +
+        '<span class="mut">' + (open ? '▾' : '▸') + '</span></div>' +
+        (open ? '<div class="clist">' + list + '</div>' : '') + '</div>';
+    }).join('');
+    return '<section class="panel"><h2>' + esc(c.name) + '<span class="cnt">' + sold.length + ' client' + (sold.length > 1 ? 's' : '') + '</span></h2>' + rows + '</section>';
+  }).filter(Boolean);
+  return groups.length ? '<p class="sub" style="margin:2px 0 14px">Payment → assets → proof → mailbox → testimonial. Click a client to open the checklist.</p>' + groups.join('')
+    : '<section class="panel"><div class="empty">No sold spots yet. Clients appear here the moment a spot is marked sold.</div></section>';
+}
+
+/* ================= RENDER: DATA & SETTINGS ================= */
+function revenueBySource(){
+  const rows = {};
+  const bump = (tag, kind, val) => { const k = tag || ''; (rows[k] = rows[k] || {leads:0, spots:0, rev:0})[kind] += val; };
+  for (const l of state.leads) bump(l.tag, 'leads', 1);
+  for (const c of state.cards){
+    for (const p of c.placements) if (p.status === 'sold'){ bump(p.source, 'spots', 1); bump(p.source, 'rev', +p.price || 0); }
+    for (const h of c.history) for (const p of h.placements){ bump(p.source, 'spots', 1); bump(p.source, 'rev', +p.price || 0); }
+  }
+  return rows;
+}
+function renderData(){
+  const s = state.settings;
+  const rev = revenueBySource();
+  const keys = TAG_ORDER.concat(rev[''] ? [''] : []).filter(k => rev[k] && (rev[k].leads || rev[k].spots || rev[k].rev));
+  const revRows = keys.map(k => {
+    const r = rev[k];
+    return '<tr><td>' + (k ? esc(TAGS[k]) : '<i>(untagged)</i>') + '</td><td class="num">' + r.leads +
+      '</td><td class="num">' + r.spots + '</td><td class="num">' + money(r.rev) + '</td></tr>';
+  }).join('');
+  const tot = keys.reduce((a,k) => ({leads:a.leads + rev[k].leads, spots:a.spots + rev[k].spots, rev:a.rev + rev[k].rev}), {leads:0, spots:0, rev:0});
+  const priceRows = SIZES.standard.map(x =>
+    '<tr><td>' + esc(x.size) + '</td><td class="num">' + x.units + '</td><td class="num">' + money(x.price) + '</td><td>' + (x.qr ? 'QR required' : '—') + '</td></tr>').join('');
+  const eliteRows = SIZES.elite.map(x =>
+    '<tr><td>' + esc(x.size) + '</td><td class="num">max ' + x.cap + '</td><td class="num">' + money(x.price) + '</td><td>QR required</td></tr>').join('');
+  return '' +
+  '<section class="panel"><h2>Backup</h2><p class="sub">Everything lives in this browser’s localStorage (key ' + LS_KEY + '). Back up before clearing the browser or switching machines.</p>' +
+    '<div class="btnrow"><button class="btn pri" data-a="backup-dl">Download JSON</button>' +
+    '<button class="btn" data-a="backup-copy">Copy JSON</button></div></section>' +
+  '<section class="panel"><h2>Restore</h2><p class="sub">Paste a backup JSON below. Older backups are fine — missing fields get defaults, and untagged leads get sources derived automatically. This replaces the current board.</p>' +
+    '<textarea id="restoreBox" rows="4" class="mono" placeholder=\'{"settings":…, "cards":[…], "leads":[…]}\'></textarea>' +
+    '<div id="restoreErr" class="small" style="color:var(--red);margin-top:5px"></div>' +
+    '<div class="btnrow" style="margin-top:8px"><button class="btn dan" data-a="restore-run" data-confirm>Restore from paste</button></div></section>' +
+  '<section class="panel"><h2>Settings</h2>' +
+    '<div class="frow" style="max-width:290px"><label class="flab">Renewal ask lead time (days before print lock)</label>' +
+    '<input type="number" min="1" max="60" data-a="set-leaddays" value="' + s.renewalLeadDays + '"></div>' +
+    '<label style="display:flex;gap:8px;align-items:center;font-size:12.5px;font-weight:600;cursor:pointer">' +
+    '<input type="checkbox" data-a="set-intro" style="width:auto"' + (s.hideIntro ? '' : ' checked') + '> Show the “How this runs” intro banner</label></section>' +
+  '<section class="panel"><h2>Revenue by source</h2><p class="sub">Attribution flows lead → spot on conversion. Counts include archived runs.</p>' +
+    (keys.length ? '<table class="tbl"><tr><th>Source</th><th class="num">Leads</th><th class="num">Sold spots</th><th class="num">Revenue</th></tr>' + revRows +
+    '<tr><td><b>Total</b></td><td class="num"><b>' + tot.leads + '</b></td><td class="num"><b>' + tot.spots + '</b></td><td class="num"><b>' + money(tot.rev) + '</b></td></tr></table>'
+    : '<div class="empty">No tagged leads or sold spots yet.</div>') + '</section>' +
+  '<section class="panel"><h2>Pricing cheat sheet</h2>' +
+    '<p class="sub">Standard 9x12 cards — ~5,000 homes, every other month, 16 ad spaces, spots combine:</p>' +
+    '<table class="tbl"><tr><th>Spot</th><th class="num">Units</th><th class="num">Price</th><th>Notes</th></tr>' + priceRows + '</table>' +
+    '<p class="sub" style="margin-top:14px">Elite cards — ~600 homes, 6 spots, QR required on all. Full sellout ' + money(2890) + ':</p>' +
+    '<table class="tbl"><tr><th>Spot</th><th class="num">Per card</th><th class="num">Price</th><th>Notes</th></tr>' + eliteRows + '</table>' +
+    '<p class="sub" style="margin-top:14px">Plainfield Summer Welcome Card — new movers, 10 spots, one per category, <b>' + money(350) + ' flat</b> covers all three summer drops.</p>' +
+  '</section>' +
+  '<section class="panel"><h2>Danger zone</h2><p class="sub">Wipes every card, spot, hold, lead and setting, then reseeds the 10 starting cards.</p>' +
+    '<div class="btnrow"><button class="btn dan" data-a="reset-all" data-confirm>Full reset</button></div></section>';
+}
+
+/* ================= MODALS ================= */
+const overlayEl = () => document.getElementById('overlay');
+function openModal(m){ modal = m; renderModal(); }
+function closeModal(){ modal = null; overlayEl().hidden = true; document.getElementById('modalBox').innerHTML = ''; render(); }
+function renderModal(){
+  const box = document.getElementById('modalBox');
+  if (!modal){ overlayEl().hidden = true; return; }
+  if (modal.kind === 'spot') box.innerHTML = spotModalHtml();
+  else if (modal.kind === 'card') box.innerHTML = cardModalHtml();
+  else if (modal.kind === 'lead') box.innerHTML = leadModalHtml();
+  else if (modal.kind === 'compose') box.innerHTML = composeModalHtml();
+  else if (modal.kind === 'import') box.innerHTML = importModalHtml();
+  overlayEl().hidden = false;
+}
+
+function spotModalHtml(){
+  const card = findCard(modal.cardId) || state.cards[0];
+  const p = modal.pid ? card.placements.find(x => x.id === modal.pid) : null;
+  const pre = modal.prefill || {};
+  const v = (k, d) => p ? (p[k] !== undefined ? p[k] : d) : (pre[k] !== undefined ? pre[k] : d);
+  const list = sizesFor(card);
+  const curSize = v('size', list[0].size);
+  const def = list.find(s => s.size === curSize);
+  const price = v('price', def ? def.price : 0);
+  const qr = p ? p.qr : (pre.qr !== undefined ? pre.qr : ((def && def.qr) || card.type === 'elite'));
+  const status = v('status', 'sold');
+  const sizeOpts = list.map(s =>
+    '<option value="' + esc(s.size) + '"' + (s.size === curSize ? ' selected' : '') + '>' + esc(s.size) + ' — ' + money(s.price) +
+    (s.units > 1 ? ' · ' + s.units + 'u' : '') + (s.qr ? ' · QR' : '') + '</option>').join('') +
+    (list.some(s => s.size === curSize) ? '' : '<option value="' + esc(curSize) + '" selected>' + esc(curSize) + '</option>');
+  const cardSel = modal.pickCard
+    ? '<div class="frow"><label class="flab">Card</label><select id="f_card" data-a="f-card">' +
+      state.cards.map(c => '<option value="' + c.id + '"' + (c.id === card.id ? ' selected' : '') + '>' + esc(c.name) +
+        (c.status === 'building' ? ' (building)' : '') + '</option>').join('') + '</select></div>'
+    : '';
+  const holdCur = p && p.status === 'hold' && p.holdExpiry
+    ? '<option value="keep" selected>Keep current (' + fmtLeft(Date.parse(p.holdExpiry) - Date.now()) + ' left)</option>' : '';
+  const title = modal.leadId ? 'Convert lead → spot' : (p ? 'Edit spot — ' + esc(card.name) : 'Add spot — ' + esc(card.name));
+  return '<h3>' + title + '</h3>' + cardSel +
+    '<div class="fgrid">' +
+    '<div><label class="flab">Business *</label><input id="f_adv" value="' + esc(v('advertiser','')) + '"></div>' +
+    '<div><label class="flab">First name</label><input id="f_first" value="' + esc(v('first','')) + '"></div>' +
+    '<div><label class="flab">Category *</label><input id="f_cat" data-a="f-cat" value="' + esc(v('category','')) + '" placeholder="e.g. Roofing"></div>' +
+    '<div><label class="flab">Status</label><select id="f_status" data-a="f-status">' +
+      '<option value="sold"' + (status === 'sold' ? ' selected' : '') + '>Sold</option>' +
+      '<option value="hold"' + (status === 'hold' ? ' selected' : '') + '>Hold</option></select></div>' +
+    '<div><label class="flab">Email</label><input id="f_email" value="' + esc(v('email','')) + '"></div>' +
+    '<div><label class="flab">Phone</label><input id="f_phone" value="' + esc(v('phone','')) + '"></div>' +
+    '<div><label class="flab">Spot size</label><select id="f_size" data-a="f-size">' + sizeOpts + '</select></div>' +
+    '<div><label class="flab">Price</label><input id="f_price" type="number" min="0" value="' + esc(price) + '"></div>' +
+    '<div id="holdRow"' + (status === 'hold' ? '' : ' hidden') + '><label class="flab">Hold length</label><select id="f_hold">' + holdCur +
+      '<option value="24">24 hours from now</option><option value="48">48 hours from now</option></select></div>' +
+    '<div><label class="flab">Source</label><select id="f_source">' +
+      '<option value="">—</option>' + TAG_ORDER.map(t => '<option value="' + t + '"' + (v('source','') === t ? ' selected' : '') + '>' + TAGS[t] + '</option>').join('') + '</select></div>' +
+    '<div class="wide ckrow">' +
+      '<label><input type="checkbox" id="f_annual"' + (v('annual', false) ? ' checked' : '') + '> Annual lock (carries through archives)</label>' +
+      '<label><input type="checkbox" id="f_qr"' + (qr ? ' checked' : '') + '> QR code on ad</label></div>' +
+    '<div class="wide"><label class="flab">Notes</label><textarea id="f_notes" rows="2">' + esc(v('notes','')) + '</textarea></div>' +
+    '</div>' +
+    '<div id="spotWarn"></div>' +
+    '<div class="btnrow" style="margin-top:12px">' +
+    '<button class="btn pri" id="spotSaveBtn" data-a="spot-save">Save spot</button>' +
+    (p ? '<button class="btn dan" data-a="spot-del" data-card="' + card.id + '" data-id="' + p.id + '" data-confirm>Delete spot</button>' : '') +
+    '<button class="btn" data-a="modal-close">Cancel</button></div>';
+}
+
+function cardModalHtml(){
+  const c = modal.cardId ? findCard(modal.cardId) : null;
+  const v = (k, d) => c ? c[k] : d;
+  return '<h3>' + (c ? 'Edit card' : 'Add card') + '</h3>' +
+    '<div class="fgrid">' +
+    '<div class="wide"><label class="flab">Card name *</label><input id="fc_name" value="' + esc(v('name','')) + '"></div>' +
+    '<div><label class="flab">Type</label><select id="fc_type">' +
+      ['standard','elite','welcome'].map(t => '<option value="' + t + '"' + (v('type','standard') === t ? ' selected' : '') + '>' +
+        (t === 'standard' ? 'Standard 9x12 (16 units)' : t === 'elite' ? 'Elite (6 spots)' : 'Welcome (10 spots)') + '</option>').join('') + '</select></div>' +
+    '<div><label class="flab">Status</label><select id="fc_status">' +
+      '<option value="live"' + (v('status','live') === 'live' ? ' selected' : '') + '>Live</option>' +
+      '<option value="building"' + (v('status','live') === 'building' ? ' selected' : '') + '>Building</option></select></div>' +
+    '<div class="wide"><label class="flab">Note</label><input id="fc_note" value="' + esc(v('note','')) + '" placeholder="homes, cadence, tie-ins"></div>' +
+    '</div><div id="cardWarn"></div>' +
+    '<div class="btnrow" style="margin-top:12px"><button class="btn pri" data-a="card-save">Save card</button>' +
+    '<button class="btn" data-a="modal-close">Cancel</button></div>';
+}
+
+function leadModalHtml(){
+  const l = modal.leadId ? state.leads.find(x => x.id === modal.leadId) : null;
+  const v = (k, d) => l ? l[k] : d;
+  return '<h3>' + (l ? 'Edit lead' : 'Add lead') + '</h3>' +
+    '<div class="fgrid">' +
+    '<div><label class="flab">Business *</label><input id="fl_biz" value="' + esc(v('biz','')) + '"></div>' +
+    '<div><label class="flab">First name</label><input id="fl_first" value="' + esc(v('first','')) + '"></div>' +
+    '<div><label class="flab">Tier</label><select id="fl_tier">' +
+      ['HIGH','MED','LOW'].map(t => '<option' + (v('tier','MED') === t ? ' selected' : '') + '>' + t + '</option>').join('') + '</select></div>' +
+    '<div><label class="flab">Competitor mailers seen (n)</label><input id="fl_n" type="number" min="0" value="' + esc(v('n',0)) + '"></div>' +
+    '<div><label class="flab">Category</label><input id="fl_cat" value="' + esc(v('cat','')) + '"></div>' +
+    '<div><label class="flab">Area</label><input id="fl_area" value="' + esc(v('area','')) + '"></div>' +
+    '<div><label class="flab">Email</label><input id="fl_email" value="' + esc(v('email','')) + '"></div>' +
+    '<div><label class="flab">Phone</label><input id="fl_phone" value="' + esc(v('phone','')) + '"></div>' +
+    '<div><label class="flab">Source (free text)</label><input id="fl_src" value="' + esc(v('src','')) + '" placeholder="e.g. seen in a mailer stack"></div>' +
+    '<div><label class="flab">Source tag</label><select id="fl_tag"><option value="">(auto from source)</option>' +
+      TAG_ORDER.map(t => '<option value="' + t + '"' + (v('tag','') === t ? ' selected' : '') + '>' + TAGS[t] + '</option>').join('') + '</select></div>' +
+    '<div><label class="flab">Stage</label><select id="fl_stage">' +
+      ['prospected','pitched','negotiating'].map(s => '<option' + (v('stage','prospected') === s ? ' selected' : '') + '>' + s + '</option>').join('') + '</select></div>' +
+    '<div><label class="flab">Angle (internal — never in outreach)</label><input id="fl_angle" value="' + esc(v('angle','')) + '"></div>' +
+    '<div class="wide"><label class="flab">Notes</label><textarea id="fl_notes" rows="2">' + esc(v('notes','')) + '</textarea></div>' +
+    '</div><div id="leadWarn"></div>' +
+    '<div class="btnrow" style="margin-top:12px"><button class="btn pri" data-a="lead-save">Save lead</button>' +
+    '<button class="btn" data-a="modal-close">Cancel</button></div>';
+}
+
+function composeModalHtml(){
+  const gmail = (window.cowork && typeof window.cowork.callMcpTool === 'function')
+    ? '<button class="btn" data-a="compose-gmail">Create Gmail draft</button>' : '';
+  return '<h3>' + esc(modal.title) + '</h3>' +
+    '<div class="frow"><label class="flab">To</label><input id="c_to" data-a="compose-to" value="' + esc(modal.to || '') + '" placeholder="email address — saved back to the record"></div>' +
+    '<div class="frow"><label class="flab">Subject</label><input id="c_subj" value="' + esc(modal.subject || '') + '"></div>' +
+    '<div class="frow"><label class="flab">Body</label><textarea id="c_body" rows="11">' + esc(modal.body || '') + '</textarea></div>' +
+    '<div class="btnrow">' +
+    '<button class="btn" data-a="copy-subject">Copy subject</button>' +
+    '<button class="btn pri" data-a="copy-body">Copy body</button>' +
+    '<button class="btn" data-a="compose-mailto">Open in mail app</button>' + gmail +
+    '<button class="btn" data-a="modal-close">Done</button></div>' +
+    '<div class="mut small" style="margin-top:8px">Nothing auto-sends. Copy into Gmail or Messenger — the touch is already marked done.</div>';
+}
+
+function importModalHtml(){
+  return '<h3>Paste import — leads</h3>' +
+    '<p class="sub">One lead per line, comma or tab separated. First column is the business name. ' +
+    'Email and phone are auto-detected anywhere in the line. Remaining columns become category, area, source (source sets the tag). ' +
+    'Wrapping quotes are stripped and header rows are skipped.</p>' +
+    '<textarea id="imp_text" rows="9" class="mono" placeholder="Joe’s Pizza, joe@pizza.com, 815-555-0110, Pizza, Plainfield, seen in mailer stack"></textarea>' +
+    '<div class="btnrow" style="margin-top:10px"><button class="btn pri" data-a="import-run">Import</button>' +
+    '<button class="btn" data-a="modal-close">Cancel</button></div>';
+}
+
+/* ================= ACTIONS ================= */
+function resetSpotWarn(){
+  if (!modal || modal.kind !== 'spot') return;
+  modal.armed = false;
+  const w = document.getElementById('spotWarn'); if (w) w.innerHTML = '';
+  const b = document.getElementById('spotSaveBtn'); if (b) b.textContent = 'Save spot';
+}
+function syncSizeFields(){
+  const card = findCard(modal.pickCard ? document.getElementById('f_card').value : modal.cardId);
+  if (!card) return;
+  const list = sizesFor(card);
+  const sel = document.getElementById('f_size');
+  const def = list.find(s => s.size === sel.value) || list[0];
+  document.getElementById('f_price').value = def.price;
+  document.getElementById('f_qr').checked = def.qr || card.type === 'elite';
+}
+function rebuildSizeOptions(){
+  const card = findCard(document.getElementById('f_card').value);
+  if (!card) return;
+  modal.cardId = card.id;
+  const list = sizesFor(card);
+  document.getElementById('f_size').innerHTML = list.map((s, i) =>
+    '<option value="' + esc(s.size) + '"' + (i === 0 ? ' selected' : '') + '>' + esc(s.size) + ' — ' + money(s.price) +
+    (s.units > 1 ? ' · ' + s.units + 'u' : '') + (s.qr ? ' · QR' : '') + '</option>').join('');
+  syncSizeFields();
+}
+
+function saveSpot(){
+  const g = id => document.getElementById(id);
+  const card = findCard(modal.pickCard ? g('f_card').value : modal.cardId);
+  if (!card) return;
+  const adv = g('f_adv').value.trim(), first = g('f_first').value.trim(), cat = g('f_cat').value.trim();
+  const warn = g('spotWarn');
+  if (!adv || !cat){
+    warn.innerHTML = '<div class="warnbox">Business name and category are both required.</div>';
+    modal.armed = false; return;
+  }
+  const size = g('f_size').value;
+  const list = sizesFor(card);
+  const def = list.find(s => s.size === size);
+  const units = def ? def.units : 1;
+  const editing = modal.pid ? card.placements.find(p => p.id === modal.pid) : null;
+  const others = card.placements.filter(p => p !== editing);
+  const issues = [];
+  const dup = others.find(p => norm(p.category) === norm(cat));
+  if (dup) issues.push('Category “' + esc(cat) + '” is already ' + (dup.status === 'hold' ? 'on hold for ' : 'taken by ') +
+    esc(dup.advertiser) + ' on this card. One business per category per card.');
+  if (card.type === 'elite' && def && def.cap){
+    const n = others.filter(p => p.size === size).length;
+    if (n >= def.cap) issues.push('Elite cap reached: max ' + def.cap + ' × ' + esc(size) + ' on this card.');
+  }
+  const cap = capOf(card);
+  const used = others.reduce((a,p) => a + (p.units || 1), 0);
+  if (used + units > cap) issues.push('Over capacity: this puts the card at ' + (used + units) + '/' + cap + ' units.');
+  if (issues.length && !modal.armed){
+    warn.innerHTML = '<div class="warnbox">' + issues.map(i => '<div>⚠ ' + i + '</div>').join('') +
+      '<div style="margin-top:5px;font-weight:400">Save again to override.</div></div>';
+    modal.armed = true;
+    g('spotSaveBtn').textContent = 'Save anyway';
+    return;
+  }
+  const status = g('f_status').value === 'hold' ? 'hold' : 'sold';
+  let p = editing;
+  if (!p){
+    p = {id:uid(), touches:blankTouches(), check:blankCheck(), renewedNext:false, holdExpiry:''};
+    card.placements.push(p);
+  }
+  Object.assign(p, {
+    status, advertiser:adv, first, category:cat,
+    email:g('f_email').value.trim(), phone:g('f_phone').value.trim(),
+    size, units, price:Math.max(0, +g('f_price').value || 0),
+    annual:g('f_annual').checked, qr:g('f_qr').checked,
+    source:g('f_source').value, notes:g('f_notes').value.trim()
+  });
+  if (status === 'hold'){
+    const hs = g('f_hold') ? g('f_hold').value : '24';
+    if (hs !== 'keep' || !p.holdExpiry)
+      p.holdExpiry = new Date(Date.now() + (hs === '48' ? 48 : 24) * 36e5).toISOString();
+  } else p.holdExpiry = '';
+  const converted = !!modal.leadId;
+  if (converted) state.leads = state.leads.filter(l => l.id !== modal.leadId);
+  save(); closeModal();
+  toast(converted ? 'Lead converted — spot saved on ' + card.name : 'Spot saved');
+}
+
+function saveCard(){
+  const g = id => document.getElementById(id);
+  const name = g('fc_name').value.trim();
+  if (!name){ g('cardWarn').innerHTML = '<div class="warnbox">Card name is required.</div>'; return; }
+  if (modal.cardId){
+    const c = findCard(modal.cardId);
+    Object.assign(c, {name, type:g('fc_type').value, status:g('fc_status').value, note:g('fc_note').value.trim()});
+  } else {
+    state.cards.push({id:uid(), name, type:g('fc_type').value, status:g('fc_status').value,
+      note:g('fc_note').value.trim(), lockDate:'', mailDate:'', placements:[], history:[]});
+  }
+  save(); closeModal(); toast('Card saved');
+}
+
+function saveLead(){
+  const g = id => document.getElementById(id);
+  const biz = g('fl_biz').value.trim();
+  if (!biz){ g('leadWarn').innerHTML = '<div class="warnbox">Business name is required.</div>'; return; }
+  const src = g('fl_src').value.trim();
+  const data = {
+    biz, first:g('fl_first').value.trim(), tier:g('fl_tier').value, n:Math.max(0, +g('fl_n').value || 0),
+    cat:g('fl_cat').value.trim(), area:g('fl_area').value.trim(),
+    email:g('fl_email').value.trim(), phone:g('fl_phone').value.trim(),
+    src, tag:g('fl_tag').value || deriveTag(src),
+    stage:g('fl_stage').value, angle:g('fl_angle').value.trim(), notes:g('fl_notes').value.trim()
+  };
+  if (modal.leadId) Object.assign(state.leads.find(l => l.id === modal.leadId), data);
+  else state.leads.push(fixLead(Object.assign({id:uid(), lastTouch:''}, data)));
+  save(); closeModal(); toast('Lead saved');
+}
+
+function startNextRun(c){
+  const keep = [], gone = [];
+  for (const p of c.placements){
+    if (p.status === 'hold'){ keep.push(p); continue; }
+    if (p.annual || p.renewedNext){
+      p.renewedNext = false;
+      p.touches = blankTouches();
+      p.check = blankCheck();
+      keep.push(p);
+    } else gone.push(Object.assign({}, p, {renewDecision:''}));
+  }
+  const src = c.mailDate || c.lockDate;
+  const label = (src ? parseDate(src) : new Date()).toLocaleDateString('en-US',{month:'short',year:'numeric'}) + ' run';
+  if (gone.length) c.history.unshift({runLabel:label, placements:gone});
+  c.placements = keep;
+  c.lockDate = ''; c.mailDate = '';
+  save(); render();
+  toast(gone.length
+    ? 'Run archived — ' + gone.length + ' spot' + (gone.length > 1 ? 's' : '') + ' moved to win-backs, annual/renewed carried forward'
+    : 'New run started — annual/renewed spots carried forward');
+}
+
+const EMAIL_RE = /[A-Za-z0-9._%+\-]+@[A-Za-z0-9.\-]+\.[A-Za-z]{2,}/;
+const PHONE_RE = /(\+?1[\s.\-]?)?\(?\d{3}\)?[\s.\-]?\d{3}[\s.\-]?\d{4}/;
+function splitLine(line){
+  if (line.includes('\t')) return line.split('\t');
+  const out = []; let cur = '', inQ = false;
+  for (const ch of line){
+    if (ch === '"') { inQ = !inQ; cur += ch; }
+    else if (ch === ',' && !inQ){ out.push(cur); cur = ''; }
+    else cur += ch;
+  }
+  out.push(cur);
+  return out;
+}
+function runImport(){
+  const txt = document.getElementById('imp_text').value;
+  const lines = txt.split(/\r?\n/).map(s => s.trim()).filter(Boolean);
+  let added = 0;
+  for (const line of lines){
+    const cells = splitLine(line).map(s => s.trim().replace(/^["']+|["']+$/g, '').trim());
+    if (!cells.length || !cells[0]) continue;
+    const lower = cells.map(x => x.toLowerCase());
+    if (/^(business( name)?|name|company|biz|lead|advertiser)$/.test(lower[0]) ||
+        lower.includes('email') || lower.includes('category') || lower.includes('phone')) continue;
+    let email = '', phone = '';
+    const rest = [];
+    cells.forEach((cell, i) => {
+      let cv = cell;
+      if (!email){ const m = cv.match(EMAIL_RE); if (m){ email = m[0]; cv = cv.replace(m[0], '').trim(); } }
+      if (!phone){ const m = cv.match(PHONE_RE); if (m){ phone = m[0].trim(); cv = cv.replace(m[0], '').trim(); } }
+      cv = cv.replace(/^[\s,;·|\-]+|[\s,;·|\-]+$/g, '');
+      if (i === 0) cells[0] = cv || cells[0];
+      else if (cv) rest.push(cv);
+    });
+    const biz = cells[0].trim();
+    if (!biz) continue;
+    const src = rest[2] || '';
+    state.leads.push(fixLead({id:uid(), tier:'MED', n:0, biz, first:'', cat:rest[0] || '', email, phone,
+      area:rest[1] || '', src, tag:deriveTag(src), angle:'', stage:'prospected', notes:'', lastTouch:''}));
+    added++;
+  }
+  save(); closeModal();
+  toast(added + ' lead' + (added === 1 ? '' : 's') + ' imported');
+}
+
+function downloadBackup(){
+  const blob = new Blob([JSON.stringify(state, null, 2)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url; a.download = 'psCommandBoard-backup-' + todayISO() + '.json';
+  document.body.appendChild(a); a.click(); a.remove();
+  setTimeout(() => URL.revokeObjectURL(url), 4000);
+  toast('Backup downloaded');
+}
+function runRestore(){
+  const box = document.getElementById('restoreBox');
+  const err = document.getElementById('restoreErr');
+  try {
+    const obj = JSON.parse(box.value);
+    if (!obj || typeof obj !== 'object' || (!Array.isArray(obj.cards) && !Array.isArray(obj.leads)))
+      throw new Error('That JSON doesn’t look like a Command Board backup (no cards/leads arrays).');
+    state = migrate(obj);
+    save(); render();
+    toast('Board restored from paste');
+  } catch(e){
+    err.textContent = 'Restore failed: ' + (e && e.message ? e.message : 'invalid JSON');
+  }
+}
+
+function openComposeFor(kind, c, p, saveTo){
+  const t = kind === 'renewal' ? tRenewal(c, p) : kind === 'results' ? tResults(c, p)
+    : kind === 'mid' ? tMid(c, p) : tWinback(c, p);
+  const titles = {renewal:'Renewal ask', results:'Results touch', mid:'Mid-cycle touch', winback:'Win-back'};
+  openModal({kind:'compose', title:titles[kind] + ' — ' + p.advertiser, subject:t.subject, body:t.body,
+    to:p.email || '', saveTo});
+}
+
+/* ================= EVENT DELEGATION =================
+   One click listener + one change listener dispatch on data-a attributes.
+   (Plus input for live search filters, and keydown for Escape.) No inline handlers.
+   No alert/confirm/prompt: destructive buttons carry data-confirm and arm to
+   "Sure?" for 2.6s before the second click executes. */
+function closeMenus(except){
+  document.querySelectorAll('.menu.open').forEach(m => { if (!except || !except.contains(m)) m.classList.remove('open'); });
+}
+function arm(el){
+  el.dataset.armed = '1';
+  el.dataset.orig = el.textContent;
+  el.textContent = 'Sure?';
+  el.classList.add('armed');
+  setTimeout(() => {
+    if (document.contains(el) && el.dataset.armed){
+      delete el.dataset.armed;
+      el.textContent = el.dataset.orig;
+      el.classList.remove('armed');
+    }
+  }, 2600);
+}
+
+document.addEventListener('click', e => {
+  const mw = e.target.closest('.menuwrap');
+  closeMenus(mw);
+  if (e.target === overlayEl()){ closeModal(); return; }
+  const el = e.target.closest('[data-a]');
+  if (!el) return;
+  const a = el.dataset.a;
+  if (el.dataset.confirm !== undefined && !el.dataset.armed){ arm(el); return; }
+  const cardOf = () => findCard(el.dataset.card);
+  const pOf = () => findP(el.dataset.card, el.dataset.id);
+
+  switch(a){
+    case 'tab': tab = el.dataset.tab; render(); break;
+    case 'intro-hide': state.settings.hideIntro = true; save(); render(); break;
+
+    /* cards */
+    case 'card-menu': { const m = el.parentElement.querySelector('.menu'); if (m) m.classList.toggle('open'); break; }
+    case 'card-add': openModal({kind:'card'}); break;
+    case 'card-edit': openModal({kind:'card', cardId:el.dataset.card}); break;
+    case 'card-status': { const c = cardOf(); c.status = c.status === 'live' ? 'building' : 'live'; save(); render(); break; }
+    case 'card-next': startNextRun(cardOf()); break;
+    case 'card-del': state.cards = state.cards.filter(c => c.id !== el.dataset.card); save(); render(); toast('Card deleted'); break;
+    case 'card-save': saveCard(); break;
+    case 'spot-add': openModal({kind:'spot', cardId:el.dataset.card}); break;
+    case 'spot-open': openModal({kind:'spot', cardId:el.dataset.card, pid:el.dataset.id}); break;
+    case 'spot-save': saveSpot(); break;
+    case 'spot-del': { const c = cardOf(); c.placements = c.placements.filter(p => p.id !== el.dataset.id); save(); closeModal(); toast('Spot deleted'); break; }
+
+    /* renewal engine */
+    case 'hold-dm': { const {card, p} = pOf(); copyText(dmHold(card, p), 'Lock-or-release DM copied'); break; }
+    case 'hold-sold': { const {p} = pOf(); p.status = 'sold'; p.holdExpiry = ''; save(); render(); toast('Locked — marked sold'); break; }
+    case 'hold-release': { const c = cardOf(); c.placements = c.placements.filter(p => p.id !== el.dataset.id); save(); render(); toast('Hold released — category open again'); break; }
+    case 'ask-draft': { const {card, p} = pOf(); p.touches.renewal = true; save(); render(); openComposeFor('renewal', card, p, v => { p.email = v; }); break; }
+    case 'ask-mark': { const {p} = pOf(); p.renewedNext = true; save(); render(); toast('Marked renewed for next run'); break; }
+    case 'res-draft': { const {card, p} = pOf(); p.touches.results = true; save(); render(); openComposeFor('results', card, p, v => { p.email = v; }); break; }
+    case 'mid-draft': { const {card, p} = pOf(); p.touches.midcycle = true; save(); render(); openComposeFor('mid', card, p, v => { p.email = v; }); break; }
+    case 'wb-draft': { const c = cardOf(); const p = c.history[+el.dataset.run].placements.find(x => x.id === el.dataset.id);
+      openComposeFor('winback', c, p, v => { p.email = v; }); break; }
+    case 'wb-back': { const c = cardOf(); const p = c.history[+el.dataset.run].placements.find(x => x.id === el.dataset.id);
+      const np = Object.assign({}, p, {id:uid(), status:'sold', annual:false, renewedNext:false, holdExpiry:'',
+        touches:blankTouches(), check:blankCheck()});
+      delete np.renewDecision;
+      c.placements.push(np);
+      p.renewDecision = 'renewed';
+      save(); render(); toast(p.advertiser + ' is back on ' + c.name); break; }
+    case 'wb-lost': { const c = cardOf(); const p = c.history[+el.dataset.run].placements.find(x => x.id === el.dataset.id);
+      p.renewDecision = 'lost'; save(); render(); toast('Marked lost'); break; }
+
+    /* leads */
+    case 'lead-add': openModal({kind:'lead'}); break;
+    case 'lead-edit': openModal({kind:'lead', leadId:el.dataset.id}); break;
+    case 'lead-save': saveLead(); break;
+    case 'lead-del': state.leads = state.leads.filter(l => l.id !== el.dataset.id); save(); render(); toast('Lead deleted'); break;
+    case 'lead-cold': { const l = state.leads.find(x => x.id === el.dataset.id);
+      if (l.stage === 'prospected') l.stage = 'pitched';
+      l.lastTouch = todayISO();
+      save(); render();
+      const t = tCold(l);
+      openModal({kind:'compose', title:'Cold email — ' + l.biz, subject:t.subject, body:t.body, to:l.email || '', saveTo:v => { l.email = v; }});
+      break; }
+    case 'lead-dm': { const l = state.leads.find(x => x.id === el.dataset.id);
+      l.lastTouch = todayISO(); save(); render();
+      copyText(dmCold(l), 'Cold DM copied'); break; }
+    case 'lead-convert': { const l = state.leads.find(x => x.id === el.dataset.id);
+      const firstLive = state.cards.find(c => c.status === 'live') || state.cards[0];
+      if (!firstLive){ toast('Add a card first'); break; }
+      openModal({kind:'spot', pickCard:true, cardId:firstLive.id, leadId:l.id,
+        prefill:{advertiser:l.biz, first:l.first, category:l.cat, email:l.email, phone:l.phone,
+          source:l.tag, notes:[l.angle, l.notes].filter(Boolean).join(' · ')}});
+      break; }
+    case 'import-open': openModal({kind:'import'}); break;
+    case 'import-run': runImport(); break;
+
+    /* clients */
+    case 'client-toggle': { const id = el.dataset.id; expanded.has(id) ? expanded.delete(id) : expanded.add(id); render(); break; }
+
+    /* compose */
+    case 'copy-subject': copyText(document.getElementById('c_subj').value, 'Subject copied'); break;
+    case 'copy-body': copyText(document.getElementById('c_body').value, 'Body copied'); break;
+    case 'compose-mailto': { const to = document.getElementById('c_to').value.trim();
+      location.href = 'mailto:' + encodeURIComponent(to) +
+        '?subject=' + encodeURIComponent(document.getElementById('c_subj').value) +
+        '&body=' + encodeURIComponent(document.getElementById('c_body').value);
+      break; }
+    case 'compose-gmail': { const to = document.getElementById('c_to').value.trim();
+      const subject = document.getElementById('c_subj').value, body = document.getElementById('c_body').value;
+      Promise.resolve()
+        .then(() => window.cowork.callMcpTool(GMAIL_DRAFT, {to:[to], subject:subject, body:body}))
+        .then(() => toast('Gmail draft created'))
+        .catch(() => toast('Gmail bridge unavailable — use Copy'));
+      break; }
+    case 'modal-close': closeModal(); break;
+
+    /* data & settings */
+    case 'backup-dl': downloadBackup(); break;
+    case 'backup-copy': copyText(JSON.stringify(state, null, 2), 'Backup JSON copied'); break;
+    case 'restore-run': runRestore(); break;
+    case 'reset-all': try { localStorage.removeItem(LS_KEY); } catch(err){}
+      state = freshState(); save(); render(); toast('Board reset to the 10 seed cards'); break;
+  }
+});
+
+document.addEventListener('change', e => {
+  if (modal && e.target.closest('.modal')) resetSpotWarn();
+  const el = e.target.closest('[data-a]');
+  if (!el) return;
+  switch(el.dataset.a){
+    case 'card-lock': { const c = findCard(el.dataset.card); c.lockDate = el.value; save(); render(); break; }
+    case 'card-mail': { const c = findCard(el.dataset.card); c.mailDate = el.value; save(); render(); break; }
+    case 'lead-stage': { const l = state.leads.find(x => x.id === el.dataset.id);
+      l.stage = el.value; l.lastTouch = todayISO(); save(); render(); break; }
+    case 'check-item': { const {p} = findP(el.dataset.card, el.dataset.id);
+      p.check[el.dataset.k] = el.checked; save(); render(); break; }
+    case 'f-size': syncSizeFields(); break;
+    case 'f-card': rebuildSizeOptions(); break;
+    case 'f-status': { const hr = document.getElementById('holdRow'); if (hr) hr.hidden = el.value !== 'hold'; break; }
+    case 'set-leaddays': { state.settings.renewalLeadDays = Math.min(60, Math.max(1, +el.value || 14)); save(); render(); break; }
+    case 'set-intro': state.settings.hideIntro = !el.checked; save(); render(); break;
+    case 'leads-stagef': leadFilters.stage = el.value; render(); break;
+    case 'leads-tagf': leadFilters.tag = el.value; render(); break;
+    case 'compose-to': if (modal && modal.kind === 'compose' && modal.saveTo){ modal.saveTo(el.value.trim()); save(); } break;
+  }
+});
+
+document.addEventListener('input', e => {
+  const el = e.target.closest('[data-a]');
+  if (!el) return;
+  if (el.dataset.a === 'cat-search'){ catQuery = el.value; renderCatResults(); }
+  else if (el.dataset.a === 'leads-q'){
+    leadFilters.q = el.value;
+    const rows = document.getElementById('leadRows');
+    if (rows) rows.innerHTML = leadRowsHtml();
+    const cnt = document.getElementById('leadCount');
+    if (cnt) cnt.textContent = leadCountText();
+  }
+});
+
+document.addEventListener('keydown', e => {
+  if (e.key === 'Escape'){
+    if (modal) closeModal();
+    closeMenus();
+    const cr = document.getElementById('catResults');
+    if (cr){ cr.hidden = true; }
+  }
+});
+
+/* 45s re-render keeps hold countdowns and days-to-lock chips fresh.
+   Skipped while a modal is open, a menu is open, or an input has focus. */
+setInterval(() => {
+  if (modal) return;
+  if (document.querySelector('.menu.open')) return;
+  const ae = document.activeElement;
+  if (ae && /^(INPUT|TEXTAREA|SELECT)$/.test(ae.tagName)) return;
+  render();
+  renderCatResults();
+}, 45000);
+
+render();
+</script>
+</body>
+</html>
