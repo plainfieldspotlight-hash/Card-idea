@@ -1,62 +1,142 @@
 import { Suspense } from "react";
 import { connection } from "next/server";
+import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { PageHeader } from "@/components/page-header";
-import { Placeholder } from "@/components/placeholder";
+import { IdeaCard } from "@/components/idea-card";
+import { Select } from "@/components/ui";
+import { SubmitButton } from "@/components/submit-button";
 
-export default function LibraryPage() {
+type Filters = {
+  tag: string;
+  source: string;
+  applied: "" | "yes" | "no";
+  archived: "" | "1";
+};
+
+function readFilters(params: Record<string, string | string[] | undefined>): Filters {
+  const one = (k: string) => (typeof params[k] === "string" ? (params[k] as string) : "");
+  const applied = one("applied");
+  return {
+    tag: one("tag"),
+    source: one("source"),
+    applied: applied === "yes" || applied === "no" ? applied : "",
+    archived: one("archived") === "1" ? "1" : "",
+  };
+}
+
+export default function LibraryPage(props: PageProps<"/library">) {
   return (
     <>
       <PageHeader title="Library" subtitle="All ideas, grouped by goal." />
       <Suspense fallback={<ListSkeleton />}>
-        <SeededIdeas />
+        <Library searchParams={props.searchParams} />
       </Suspense>
-      <div className="mt-6">
-        <Placeholder phase={2}>
-          Filters for tag, source, applied, and archived. Tap a card to open its detail screen.
-        </Placeholder>
-      </div>
     </>
   );
 }
 
-async function SeededIdeas() {
-  await connection(); // read fresh on every request
-  const goals = await prisma.goal.findMany({
-    orderBy: { createdAt: "asc" },
-    include: {
-      ideas: {
-        where: { status: "active" },
-        orderBy: { createdAt: "asc" },
-        include: { source: true },
-      },
-    },
-  });
+async function Library({ searchParams }: { searchParams: PageProps<"/library">["searchParams"] }) {
+  await connection();
+  const filters = readFilters(await searchParams);
+  const active = Object.values(filters).some(Boolean);
 
-  if (goals.length === 0) {
-    return <p className="text-sm text-muted">No ideas yet.</p>;
+  const [tags, sources, ideas] = await Promise.all([
+    prisma.tag.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
+    prisma.source.findMany({ orderBy: { title: "asc" }, select: { id: true, title: true } }),
+    prisma.idea.findMany({
+      where: {
+        status: filters.archived ? undefined : "active",
+        ...(filters.tag ? { tags: { some: { tag: { name: filters.tag } } } } : {}),
+        ...(filters.source ? { sourceId: filters.source } : {}),
+        ...(filters.applied === "yes" ? { appliedCount: { gt: 0 } } : {}),
+        ...(filters.applied === "no" ? { appliedCount: 0 } : {}),
+      },
+      orderBy: [{ status: "asc" }, { createdAt: "desc" }],
+      include: {
+        source: { select: { title: true } },
+        goal: { select: { id: true, name: true } },
+        tags: { include: { tag: { select: { name: true } } } },
+      },
+    }),
+  ]);
+
+  // Group by goal, keeping goal order stable and "No goal" last.
+  const groups = new Map<string, { name: string; ideas: typeof ideas }>();
+  for (const idea of ideas) {
+    const key = idea.goal?.id ?? "__none";
+    const name = idea.goal?.name ?? "No goal";
+    if (!groups.has(key)) groups.set(key, { name, ideas: [] });
+    groups.get(key)!.ideas.push(idea);
   }
+  const ordered = Array.from(groups.entries()).sort(([a], [b]) =>
+    a === "__none" ? 1 : b === "__none" ? -1 : 0,
+  );
 
   return (
-    <div className="space-y-6">
-      {goals.map((goal) => (
-        <section key={goal.id}>
-          <h2 className="mb-2 text-sm font-semibold uppercase tracking-wide text-muted">
-            {goal.name}
-          </h2>
-          <ul className="space-y-2">
-            {goal.ideas.map((idea) => (
-              <li key={idea.id} className="rounded-2xl border border-border bg-card p-4">
-                <p className="text-sm leading-relaxed">{idea.text}</p>
-                {idea.source ? (
-                  <p className="mt-2 text-xs text-muted">{idea.source.title}</p>
-                ) : null}
-              </li>
-            ))}
-          </ul>
-        </section>
-      ))}
-    </div>
+    <>
+      <form method="get" className="mb-6 grid grid-cols-2 gap-2">
+        <Select name="tag" defaultValue={filters.tag} aria-label="Tag">
+          <option value="">Any tag</option>
+          {tags.map((t) => (
+            <option key={t.name} value={t.name}>
+              #{t.name}
+            </option>
+          ))}
+        </Select>
+        <Select name="source" defaultValue={filters.source} aria-label="Source">
+          <option value="">Any source</option>
+          {sources.map((s) => (
+            <option key={s.id} value={s.id}>
+              {s.title}
+            </option>
+          ))}
+        </Select>
+        <Select name="applied" defaultValue={filters.applied} aria-label="Applied">
+          <option value="">Applied or not</option>
+          <option value="yes">Applied</option>
+          <option value="no">Not yet applied</option>
+        </Select>
+        <Select name="archived" defaultValue={filters.archived} aria-label="Archived">
+          <option value="">Hide archived</option>
+          <option value="1">Include archived</option>
+        </Select>
+        <SubmitButton className="col-span-2" variant="secondary" pendingLabel="Filtering…">
+          Filter
+        </SubmitButton>
+        {active ? (
+          <Link href="/library" className="col-span-2 text-center text-xs text-muted hover:text-foreground">
+            Clear filters
+          </Link>
+        ) : null}
+      </form>
+
+      {ideas.length === 0 ? (
+        <p className="rounded-2xl border border-dashed border-border bg-card p-5 text-center text-sm text-muted">
+          {active ? "Nothing matches these filters." : "No ideas yet."}{" "}
+          <Link href="/add" className="text-accent underline-offset-2 hover:underline">
+            Add one
+          </Link>
+          .
+        </p>
+      ) : (
+        <div className="space-y-6">
+          {ordered.map(([key, group]) => (
+            <section key={key}>
+              <h2 className="mb-2 flex items-baseline justify-between text-sm font-semibold uppercase tracking-wide text-muted">
+                <span>{group.name}</span>
+                <span className="text-xs font-normal normal-case tabular-nums">{group.ideas.length}</span>
+              </h2>
+              <ul className="space-y-2">
+                {group.ideas.map((idea) => (
+                  <IdeaCard key={idea.id} idea={idea} />
+                ))}
+              </ul>
+            </section>
+          ))}
+        </div>
+      )}
+    </>
   );
 }
 

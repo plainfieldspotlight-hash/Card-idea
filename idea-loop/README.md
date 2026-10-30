@@ -26,4 +26,4 @@ Open it on your phone from the same Wi-Fi with the network URL that `next dev` p
 
 ## Status
 
-Phase 1 (skeleton) is done: Next.js App Router, Prisma + SQLite with the five tables, seed script, and a bottom nav with Today, Add, Library, Goals, and Brief. Today, Library, and Goals already read from the database. Everything else is a placeholder until its phase.
+Phases 1 and 2 are done. You can capture ideas on Add (idea, source, tag, goal, where you could use it), browse the Library grouped by goal with tag, source, applied and archived filters, open an idea's detail screen to edit, archive, restore or delete it, and create and edit goals. Today shows what is due; the review loop itself (Used it / Not yet) arrives in Phase 3. Brief is a placeholder until Phase 5.

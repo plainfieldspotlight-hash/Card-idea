@@ -1,6 +1,6 @@
 # Idea Loop
 
-Short project memory. SPEC.md has the full spec.
+Project memory. SPEC.md has the full spec.
 
 ## Product
 Single-user microlearning app. Saved ideas come back on a schedule until you have used them: capture, review at the right time, answer "where did you use this?", watch the applied count grow. No social, no curated library, no streaks.
@@ -22,7 +22,8 @@ Next.js 16 App Router (Cache Components on), TypeScript, Tailwind v4, Prisma 7 +
 ## Conventions
 - Any server component that reads the DB: `await connection()` first and wrap it in `<Suspense>`, otherwise Next prerenders the query at build time.
 - Mobile first. Bottom nav: Today, Add, Library, Goals, Brief. Opens on Today.
+- Mutations: server actions in `src/lib/actions.ts`, FormData in, redirect out.
 - Commands: `npm run dev`, `npm run setup` (migrate + seed), `npm run db:seed`, `npm run typecheck`, `npm run lint`, `npm run build`.
 
 ## Build order
-1. Skeleton (done) 2. Capture + Library 3. Review loop 4. AI import 5. Briefs + weekly summary 6. Deploy. Finish each phase before the next. Use the app for two weeks after Phase 3 before Phase 4.
+1. Skeleton (done) 2. Capture + Library (done) 3. Review loop 4. AI import 5. Briefs + weekly summary 6. Deploy. Finish each phase before the next. Live with Phase 3 for two weeks before Phase 4.
