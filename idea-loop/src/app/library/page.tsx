@@ -6,6 +6,8 @@ import { PageHeader } from "@/components/page-header";
 import { IdeaCard } from "@/components/idea-card";
 import { Select } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
+import { Cover } from "@/components/cover";
+import { imageSrc } from "@/lib/cover";
 
 type Filters = {
   tag: string;
@@ -42,7 +44,10 @@ async function Library({ searchParams }: { searchParams: PageProps<"/library">["
   const active = Object.values(filters).some(Boolean);
 
   const [tags, sources, ideas] = await Promise.all([
-    prisma.tag.findMany({ orderBy: { name: "asc" }, select: { name: true } }),
+    prisma.tag.findMany({
+      orderBy: { name: "asc" },
+      select: { id: true, name: true, imageUrl: true, imageData: true, updatedAt: true, _count: { select: { ideas: true } } },
+    }),
     prisma.source.findMany({ orderBy: { title: "asc" }, select: { id: true, title: true } }),
     prisma.idea.findMany({
       where: {
@@ -55,18 +60,18 @@ async function Library({ searchParams }: { searchParams: PageProps<"/library">["
       orderBy: [{ status: "asc" }, { createdAt: "desc" }],
       include: {
         source: { select: { title: true } },
-        goal: { select: { id: true, name: true } },
+        goal: { select: { id: true, name: true, imageUrl: true, imageData: true, updatedAt: true } },
         tags: { include: { tag: { select: { name: true } } } },
       },
     }),
   ]);
 
   // Group by goal, keeping goal order stable and "No goal" last.
-  const groups = new Map<string, { name: string; ideas: typeof ideas }>();
+  const groups = new Map<string, { name: string; goal: (typeof ideas)[number]["goal"]; ideas: typeof ideas }>();
   for (const idea of ideas) {
     const key = idea.goal?.id ?? "__none";
     const name = idea.goal?.name ?? "No goal";
-    if (!groups.has(key)) groups.set(key, { name, ideas: [] });
+    if (!groups.has(key)) groups.set(key, { name, goal: idea.goal, ideas: [] });
     groups.get(key)!.ideas.push(idea);
   }
   const ordered = Array.from(groups.entries()).sort(([a], [b]) =>
@@ -75,6 +80,35 @@ async function Library({ searchParams }: { searchParams: PageProps<"/library">["
 
   return (
     <>
+      {tags.length ? (
+        <section className="mb-6">
+          <div className="mb-2 flex items-baseline justify-between">
+            <h2 className="text-sm font-semibold uppercase tracking-wide text-muted">Topics</h2>
+            <Link href="/topics" className="text-xs text-muted hover:text-foreground">
+              All topics
+            </Link>
+          </div>
+          <ul className="-mx-4 flex snap-x gap-3 overflow-x-auto px-4 pb-1">
+            {tags.map((t) => (
+              <li key={t.id} className="w-28 shrink-0 snap-start">
+                <Link
+                  href={`/library?tag=${encodeURIComponent(t.name)}`}
+                  className={`block overflow-hidden rounded-xl border transition-colors hover:border-accent/60 ${
+                    filters.tag === t.name ? "border-accent" : "border-border"
+                  }`}
+                >
+                  <Cover name={t.name} src={imageSrc("tag", t)} className="aspect-square w-full" />
+                  <div className="bg-card px-2 py-1.5">
+                    <p className="truncate text-xs font-medium">#{t.name}</p>
+                    <p className="text-[11px] text-muted tabular-nums">{t._count.ideas} {t._count.ideas === 1 ? "idea" : "ideas"}</p>
+                  </div>
+                </Link>
+              </li>
+            ))}
+          </ul>
+        </section>
+      ) : null}
+
       <form method="get" className="mb-6 grid grid-cols-2 gap-2">
         <Select name="tag" defaultValue={filters.tag} aria-label="Tag">
           <option value="">Any tag</option>
@@ -123,8 +157,19 @@ async function Library({ searchParams }: { searchParams: PageProps<"/library">["
         <div className="space-y-6">
           {ordered.map(([key, group]) => (
             <section key={key}>
-              <h2 className="mb-2 flex items-baseline justify-between text-sm font-semibold uppercase tracking-wide text-muted">
-                <span>{group.name}</span>
+              <h2 className="mb-2 flex items-center justify-between gap-3 text-sm font-semibold uppercase tracking-wide text-muted">
+                <span className="flex items-center gap-2">
+                  {group.goal ? (
+                    <Cover name={group.goal.name} src={imageSrc("goal", group.goal)} size="sm" className="h-7 w-7 rounded-lg" />
+                  ) : null}
+                  {group.goal ? (
+                    <Link href={`/goals/${group.goal.id}/edit`} className="hover:text-foreground">
+                      {group.name}
+                    </Link>
+                  ) : (
+                    <span>{group.name}</span>
+                  )}
+                </span>
                 <span className="text-xs font-normal normal-case tabular-nums">{group.ideas.length}</span>
               </h2>
               <ul className="space-y-2">

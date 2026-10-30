@@ -5,6 +5,8 @@ import { prisma } from "@/lib/db";
 import { createGoal } from "@/lib/actions";
 import { PageHeader } from "@/components/page-header";
 import { Card, Chip, Field, Input, Notice } from "@/components/ui";
+import { Cover } from "@/components/cover";
+import { imageSrc } from "@/lib/cover";
 import { SubmitButton } from "@/components/submit-button";
 
 export default function GoalsPage(props: PageProps<"/goals">) {
@@ -45,10 +47,12 @@ async function GoalList({ searchParams }: { searchParams: PageProps<"/goals">["s
               <li key={goal.id}>
                 <Link
                   href={`/goals/${goal.id}/edit`}
-                  className={`block rounded-2xl border border-border bg-card p-4 transition-colors hover:border-accent/60 ${
+                  className={`block overflow-hidden rounded-2xl border border-border bg-card transition-colors hover:border-accent/60 ${
                     goal.status !== "active" ? "opacity-60" : ""
                   }`}
                 >
+                  <Cover name={goal.name} src={imageSrc("goal", goal)} className="aspect-[3/1] w-full" />
+                  <div className="p-4">
                   <div className="flex items-start justify-between gap-3">
                     <div>
                       <p className="font-medium">{goal.name}</p>
@@ -63,6 +67,7 @@ async function GoalList({ searchParams }: { searchParams: PageProps<"/goals">["s
                     <span>
                       <span className="font-semibold text-foreground tabular-nums">{applied}</span> applied
                     </span>
+                  </div>
                   </div>
                 </Link>
               </li>

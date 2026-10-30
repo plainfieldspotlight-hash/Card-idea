@@ -31,6 +31,9 @@ model Goal {
   name        String
   description String?
   status      String   @default("active") // active | done | paused
+  imageUrl    String?  @map("image_url") // external image, or null
+  imageData   Bytes?   @map("image_data") // uploaded image, served from /images/goal/[id]
+  imageMime   String?  @map("image_mime")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
@@ -67,6 +70,9 @@ model Idea {
 model Tag {
   id        String   @id @default(cuid())
   name      String   @unique
+  imageUrl  String?  @map("image_url")
+  imageData Bytes?   @map("image_data") // served from /images/tag/[id]
+  imageMime String?  @map("image_mime")
   createdAt DateTime @default(now()) @map("created_at")
   updatedAt DateTime @updatedAt @map("updated_at")
 

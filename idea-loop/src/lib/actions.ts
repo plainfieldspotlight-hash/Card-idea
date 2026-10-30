@@ -185,3 +185,19 @@ export async function deleteGoal(formData: FormData) {
   invalidateAll();
   redirect("/goals");
 }
+
+// ---------------------------------------------------------------------------
+// Tags (topics)
+// ---------------------------------------------------------------------------
+
+export async function renameTag(formData: FormData) {
+  const id = text(formData, "id");
+  const [name] = parseTags(text(formData, "name"));
+  if (!id) redirect("/topics");
+  if (!name) redirect(`/topics/${id}?error=Give+the+topic+a+name.`);
+  const clash = await prisma.tag.findUnique({ where: { name } });
+  if (clash && clash.id !== id) redirect(`/topics/${id}?error=A+topic+with+that+name+already+exists.`);
+  await prisma.tag.update({ where: { id }, data: { name } });
+  invalidateAll();
+  redirect(`/topics/${id}`);
+}

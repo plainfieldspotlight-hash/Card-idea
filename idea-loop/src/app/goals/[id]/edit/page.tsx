@@ -7,6 +7,8 @@ import { deleteGoal, updateGoal } from "@/lib/actions";
 import { PageHeader } from "@/components/page-header";
 import { Button, Field, Input, Notice, Select } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
+import { ImageForm } from "@/components/image-form";
+import { imageSrc } from "@/lib/cover";
 
 export default function EditGoalPage(props: PageProps<"/goals/[id]/edit">) {
   return (
@@ -57,6 +59,10 @@ async function EditGoal({
         </Field>
         <SubmitButton className="w-full">Save goal</SubmitButton>
       </form>
+
+      <div className="mt-6">
+        <ImageForm kind="goal" id={goal.id} name={goal.name} src={imageSrc("goal", goal)} />
+      </div>
 
       <form action={deleteGoal} className="mt-8 border-t border-border pt-6">
         <input type="hidden" name="id" value={goal.id} />

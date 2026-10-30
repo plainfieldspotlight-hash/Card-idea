@@ -10,7 +10,7 @@ Six models, snake_case tables, each with id, created_at, updated_at.
 - `sources`: title, type (book|article|podcast|person|other), url, author, raw_text
 - `goals`: name, description, status (active|done|paused)
 - `ideas`: text, context, counterpoint, use_note, source_id, goal_id, status (active|archived), review_interval_index, next_review_at, applied_count
-- `tags` + `idea_tags`: many to many
+- `tags` + `idea_tags`: many to many. Goals and tags carry image_url or image_data (served at `/images/[kind]/[id]`); `src/lib/cover.ts` generates a default cover from the name.
 - `applications`: idea_id, note, applied_at (one row per "yes, I used it")
 
 ## Review rule
@@ -21,7 +21,7 @@ Next.js 16 App Router (Cache Components on), TypeScript, Tailwind v4, Prisma 7 +
 
 ## Conventions
 - Server components that read the DB: `await connection()` first, inside `<Suspense>`, or Next prerenders the query at build time.
-- Mobile first. Bottom nav: Today, Add, Library, Goals, Brief. Opens on Today.
+- Mobile first. Bottom nav: Today, Add, Library, Goals, Brief. Opens on Today. Topics (tags) live at `/topics`.
 - Mutations: server actions in `src/lib/actions.ts`, FormData in, redirect out.
 - Commands: `npm run dev`, `npm run setup` (migrate + seed), `npm run db:seed`, `npm run typecheck`, `npm run lint`, `npm run build`.
 
