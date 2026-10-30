@@ -20,7 +20,7 @@ Intervals are `[1, 3, 7, 14, 30, 90]` days (`src/lib/review.ts`). "Used it": ind
 Next.js 16 App Router (Cache Components on), TypeScript, Tailwind v4, Prisma 7 + SQLite via better-sqlite3 adapter (Supabase Postgres in Phase 6), Claude API from Phase 4. Client generated to `src/generated/prisma` (gitignored), wrapped in `src/lib/db.ts`.
 
 ## Conventions
-- Any server component that reads the DB: `await connection()` first and wrap it in `<Suspense>`, otherwise Next prerenders the query at build time.
+- Server components that read the DB: `await connection()` first, inside `<Suspense>`, or Next prerenders the query at build time.
 - Mobile first. Bottom nav: Today, Add, Library, Goals, Brief. Opens on Today.
 - Mutations: server actions in `src/lib/actions.ts`, FormData in, redirect out.
 - Commands: `npm run dev`, `npm run setup` (migrate + seed), `npm run db:seed`, `npm run typecheck`, `npm run lint`, `npm run build`.
