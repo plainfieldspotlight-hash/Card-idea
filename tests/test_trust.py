@@ -118,19 +118,23 @@ def test_backtest_insufficient_history(conn):
 
 
 def test_event_recency_feature(conn):
+    # demo.seed snapshots the last `days` days from today and event_recency only
+    # counts events within 90 days, so the event date must move with the clock
+    # rather than being hard-coded.
     demo.seed(conn, n_cards=6, days=20)
+    event_date = (date.today() - timedelta(days=10)).isoformat()
     conn.execute("INSERT INTO events (event_date, note, match) VALUES (?, ?, ?)",
-                 ("2026-06-30", "reprint news", "charizard"))
+                 (event_date, "reprint news", "charizard"))
     conn.commit()
     df = features.load_frame(conn)
     df = features.add_features(df, events=features.load_events(conn))
     hits = df[df["name"].str.lower().str.contains("charizard")]
     misses = df[~df["name"].str.lower().str.contains("charizard")]
     assert misses["event_recency"].isna().all()
-    after = hits[hits["snapshot_date"] >= "2026-06-30"]
-    if len(after):
-        assert after["event_recency"].notna().any()
-        assert (after["event_recency"].dropna() >= 0).all()
+    after = hits[hits["snapshot_date"] >= event_date]
+    assert len(after), "seed should produce snapshots after the event"
+    assert after["event_recency"].notna().any()
+    assert (after["event_recency"].dropna() >= 0).all()
 
 
 def test_cross_card_features_leave_one_out(conn):
