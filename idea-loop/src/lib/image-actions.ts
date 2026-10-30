@@ -6,22 +6,30 @@ import { prisma } from "@/lib/db";
 
 const MAX_BYTES = 3 * 1024 * 1024; // 3 MB is plenty for a cover
 
-type Kind = "goal" | "tag";
+import type { ImageKind } from "@/lib/cover";
+
+type Kind = ImageKind;
 
 function back(kind: Kind, id: string, error?: string) {
-  const base = kind === "goal" ? `/goals/${id}/edit` : `/topics/${id}`;
+  const base = kind === "goal" ? `/goals/${id}/edit` : kind === "area" ? `/areas/${id}` : `/topics/${id}`;
   redirect(error ? `${base}?error=${encodeURIComponent(error)}` : base);
+}
+
+function readKind(formData: FormData): Kind {
+  const raw = formData.get("kind");
+  return raw === "tag" || raw === "area" ? raw : "goal";
 }
 
 async function write(kind: Kind, id: string, data: { imageUrl: string | null; imageData: Uint8Array<ArrayBuffer> | null; imageMime: string | null }) {
   if (kind === "goal") await prisma.goal.update({ where: { id }, data });
+  else if (kind === "area") await prisma.area.update({ where: { id }, data });
   else await prisma.tag.update({ where: { id }, data });
   revalidatePath("/", "layout");
 }
 
 /** Set a goal's or tag's image from an uploaded file or a pasted URL. */
 export async function setImage(formData: FormData) {
-  const kind = formData.get("kind") === "tag" ? "tag" : "goal";
+  const kind = readKind(formData);
   const id = String(formData.get("id") ?? "");
   if (!id) redirect("/");
 
@@ -47,7 +55,7 @@ export async function setImage(formData: FormData) {
 
 /** Remove the custom image and fall back to the generated cover. */
 export async function clearImage(formData: FormData) {
-  const kind = formData.get("kind") === "tag" ? "tag" : "goal";
+  const kind = readKind(formData);
   const id = String(formData.get("id") ?? "");
   if (!id) redirect("/");
   await write(kind, id, { imageUrl: null, imageData: null, imageMime: null });

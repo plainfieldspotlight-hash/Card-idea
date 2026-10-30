@@ -52,6 +52,15 @@ async function resolveTags(formData: FormData): Promise<string[]> {
   return ids;
 }
 
+/** Area for an idea: the goal's area when a goal is chosen, otherwise the area picked directly. */
+async function resolveArea(formData: FormData, goalId: string | null): Promise<string | null> {
+  if (goalId) {
+    const goal = await prisma.goal.findUnique({ where: { id: goalId }, select: { areaId: true } });
+    if (goal?.areaId) return goal.areaId;
+  }
+  return optional(formData, "areaId");
+}
+
 function invalidateAll() {
   revalidatePath("/", "layout");
 }
@@ -67,6 +76,7 @@ export async function createIdea(formData: FormData) {
   const sourceId = await resolveSource(formData);
   const tagIds = await resolveTags(formData);
   const goalId = optional(formData, "goalId");
+  const areaId = await resolveArea(formData, goalId);
 
   await prisma.idea.create({
     data: {
@@ -76,6 +86,7 @@ export async function createIdea(formData: FormData) {
       counterpoint: optional(formData, "counterpoint"),
       sourceId,
       goalId,
+      areaId,
       reviewIntervalIndex: 0,
       nextReviewAt: nextReviewDate(0),
       tags: { create: tagIds.map((tagId) => ({ tagId })) },
@@ -95,6 +106,7 @@ export async function updateIdea(formData: FormData) {
   const sourceId = await resolveSource(formData);
   const tagIds = await resolveTags(formData);
   const goalId = optional(formData, "goalId");
+  const areaId = await resolveArea(formData, goalId);
 
   await prisma.$transaction([
     prisma.ideaTag.deleteMany({ where: { ideaId: id } }),
@@ -107,6 +119,7 @@ export async function updateIdea(formData: FormData) {
         counterpoint: optional(formData, "counterpoint"),
         sourceId,
         goalId,
+        areaId,
         tags: { create: tagIds.map((tagId) => ({ tagId })) },
       },
     }),
@@ -157,7 +170,9 @@ export async function deleteIdea(formData: FormData) {
 export async function createGoal(formData: FormData) {
   const name = text(formData, "name");
   if (!name) redirect("/goals?error=Give+the+goal+a+name.");
-  await prisma.goal.create({ data: { name, description: optional(formData, "description") } });
+  await prisma.goal.create({
+    data: { name, description: optional(formData, "description"), areaId: optional(formData, "areaId") },
+  });
   invalidateAll();
   redirect("/goals");
 }
@@ -169,10 +184,15 @@ export async function updateGoal(formData: FormData) {
   if (!name) redirect(`/goals/${id}/edit?error=Give+the+goal+a+name.`);
   const rawStatus = text(formData, "status");
   const status = (GOAL_STATUSES as readonly string[]).includes(rawStatus) ? rawStatus : "active";
-  await prisma.goal.update({
-    where: { id },
-    data: { name, description: optional(formData, "description"), status },
-  });
+  const areaId = optional(formData, "areaId");
+  await prisma.$transaction([
+    prisma.goal.update({
+      where: { id },
+      data: { name, description: optional(formData, "description"), status, areaId },
+    }),
+    // Ideas follow their goal's area.
+    prisma.idea.updateMany({ where: { goalId: id }, data: { areaId } }),
+  ]);
   invalidateAll();
   redirect("/goals");
 }
@@ -200,4 +220,42 @@ export async function renameTag(formData: FormData) {
   await prisma.tag.update({ where: { id }, data: { name } });
   invalidateAll();
   redirect(`/topics/${id}`);
+}
+
+// ---------------------------------------------------------------------------
+// Areas (life areas: career, family, friends...)
+// ---------------------------------------------------------------------------
+
+export async function createArea(formData: FormData) {
+  const name = text(formData, "name");
+  if (!name) redirect("/areas?error=Give+the+area+a+name.");
+  const clash = await prisma.area.findUnique({ where: { name } });
+  if (clash) redirect("/areas?error=An+area+with+that+name+already+exists.");
+  const last = await prisma.area.findFirst({ orderBy: { sortOrder: "desc" }, select: { sortOrder: true } });
+  const area = await prisma.area.create({
+    data: { name, description: optional(formData, "description"), sortOrder: (last?.sortOrder ?? 0) + 1 },
+  });
+  invalidateAll();
+  redirect(`/areas/${area.id}`);
+}
+
+export async function updateArea(formData: FormData) {
+  const id = text(formData, "id");
+  const name = text(formData, "name");
+  if (!id) redirect("/areas");
+  if (!name) redirect(`/areas/${id}?error=Give+the+area+a+name.`);
+  const clash = await prisma.area.findUnique({ where: { name } });
+  if (clash && clash.id !== id) redirect(`/areas/${id}?error=An+area+with+that+name+already+exists.`);
+  await prisma.area.update({ where: { id }, data: { name, description: optional(formData, "description") } });
+  invalidateAll();
+  redirect(`/areas/${id}`);
+}
+
+export async function deleteArea(formData: FormData) {
+  const id = text(formData, "id");
+  if (!id) return;
+  // Goals and ideas keep existing; their area_id becomes null (onDelete: SetNull).
+  await prisma.area.delete({ where: { id } });
+  invalidateAll();
+  redirect("/areas");
 }

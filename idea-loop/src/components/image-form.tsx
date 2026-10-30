@@ -2,6 +2,7 @@ import { Cover } from "@/components/cover";
 import { Button, Card, Input } from "@/components/ui";
 import { SubmitButton } from "@/components/submit-button";
 import { clearImage, setImage } from "@/lib/image-actions";
+import type { ImageKind } from "@/lib/cover";
 
 export function ImageForm({
   kind,
@@ -9,7 +10,7 @@ export function ImageForm({
   name,
   src,
 }: {
-  kind: "goal" | "tag";
+  kind: ImageKind;
   id: string;
   name: string;
   src: string | null;
@@ -53,7 +54,7 @@ export function ImageForm({
         </form>
       ) : (
         <p className="mt-3 text-center text-xs text-muted">
-          Without a picture, {kind === "goal" ? "the goal" : "the topic"} gets this generated cover.
+          Without a picture, {kind === "goal" ? "the goal" : kind === "area" ? "the area" : "the topic"} gets this generated cover.
         </p>
       )}
     </Card>

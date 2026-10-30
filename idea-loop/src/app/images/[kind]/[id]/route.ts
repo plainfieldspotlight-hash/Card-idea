@@ -2,7 +2,7 @@ import { connection } from "next/server";
 import { prisma } from "@/lib/db";
 
 // Serves uploaded cover images stored in the database:
-// /images/goal/<id> and /images/tag/<id>.
+// /images/goal/<id>, /images/tag/<id> and /images/area/<id>.
 export async function GET(_req: Request, ctx: RouteContext<"/images/[kind]/[id]">) {
   await connection();
   const { kind, id } = await ctx.params;
@@ -12,7 +12,9 @@ export async function GET(_req: Request, ctx: RouteContext<"/images/[kind]/[id]"
       ? await prisma.goal.findUnique({ where: { id }, select: { imageData: true, imageMime: true } })
       : kind === "tag"
         ? await prisma.tag.findUnique({ where: { id }, select: { imageData: true, imageMime: true } })
-        : null;
+        : kind === "area"
+          ? await prisma.area.findUnique({ where: { id }, select: { imageData: true, imageMime: true } })
+          : null;
 
   if (!row?.imageData) return new Response("Not found", { status: 404 });
 

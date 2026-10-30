@@ -148,6 +148,29 @@ function Icon({ name, className }: { name: CoverIcon; className: string }) {
           <path d="M5 20c3-5 7-8 12-11" />
         </svg>
       );
+    case "briefcase":
+      return (
+        <svg {...p}>
+          <rect x="3" y="7" width="18" height="13" rx="2" />
+          <path d="M9 7V5a2 2 0 0 1 2-2h2a2 2 0 0 1 2 2v2M3 13h18" />
+        </svg>
+      );
+    case "megaphone":
+      return (
+        <svg {...p}>
+          <path d="M3 10v4a1 1 0 0 0 1 1h3l8 4V5L7 9H4a1 1 0 0 0-1 1z" />
+          <path d="M18 9a4 4 0 0 1 0 6M7 15l1 5h3l-1-5" />
+        </svg>
+      );
+    case "palette":
+      return (
+        <svg {...p}>
+          <path d="M12 3a9 9 0 1 0 0 18h1.5a2 2 0 0 0 0-4H13a1.5 1.5 0 0 1 0-3h2.5A5.5 5.5 0 0 0 21 8.5 7 7 0 0 0 12 3z" />
+          <circle cx="7.5" cy="11" r="1" fill="currentColor" />
+          <circle cx="10" cy="7" r="1" fill="currentColor" />
+          <circle cx="15" cy="7" r="1" fill="currentColor" />
+        </svg>
+      );
     default:
       return null;
   }

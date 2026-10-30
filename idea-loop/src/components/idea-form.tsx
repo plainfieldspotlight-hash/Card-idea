@@ -9,15 +9,18 @@ export type IdeaFormValues = {
   tags?: string;
   useNote?: string;
   goalId?: string | null;
+  areaId?: string | null;
   context?: string | null;
   counterpoint?: string | null;
 };
 
 type Option = { id: string; name: string };
+type GoalOption = { id: string; name: string; areaId: string | null };
 
 export function IdeaForm({
   action,
   values = {},
+  areas,
   goals,
   sources,
   tags,
@@ -26,7 +29,8 @@ export function IdeaForm({
 }: {
   action: (formData: FormData) => Promise<void>;
   values?: IdeaFormValues;
-  goals: Option[];
+  areas: Option[];
+  goals: GoalOption[];
   sources: { title: string }[];
   tags: Option[];
   submitLabel: string;
@@ -91,16 +95,46 @@ export function IdeaForm({
         </datalist>
       </Field>
 
-      <Field label="Goal" htmlFor="goalId">
-        <Select id="goalId" name="goalId" defaultValue={values.goalId ?? ""}>
-          <option value="">No goal</option>
-          {goals.map((g) => (
-            <option key={g.id} value={g.id}>
-              {g.name}
-            </option>
-          ))}
-        </Select>
-      </Field>
+      <div className="grid grid-cols-2 gap-2">
+        <Field label="Area" hint="career, family…" htmlFor="areaId">
+          <Select id="areaId" name="areaId" defaultValue={values.areaId ?? ""}>
+            <option value="">No area</option>
+            {areas.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </Select>
+        </Field>
+        <Field label="Goal" hint="sets the area" htmlFor="goalId">
+          <Select id="goalId" name="goalId" defaultValue={values.goalId ?? ""}>
+            <option value="">No goal</option>
+            {areas.map((a) => {
+              const inArea = goals.filter((g) => g.areaId === a.id);
+              return inArea.length ? (
+                <optgroup key={a.id} label={a.name}>
+                  {inArea.map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+                </optgroup>
+              ) : null;
+            })}
+            {goals.some((g) => !g.areaId) ? (
+              <optgroup label="No area">
+                {goals
+                  .filter((g) => !g.areaId)
+                  .map((g) => (
+                    <option key={g.id} value={g.id}>
+                      {g.name}
+                    </option>
+                  ))}
+              </optgroup>
+            ) : null}
+          </Select>
+        </Field>
+      </div>
 
       <Field label="Where I could use this" hint="optional" htmlFor="useNote">
         <Input

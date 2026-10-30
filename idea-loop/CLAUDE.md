@@ -6,11 +6,12 @@ SPEC.md has the full spec.
 Single-user microlearning app. Saved ideas come back on a schedule until used: capture, review at the right time, answer "where did you use this?", watch the applied count grow. No social, no curated library, no streaks.
 
 ## Data model (Prisma, `prisma/schema.prisma`)
-Six models, snake_case tables, all with id, created_at, updated_at.
+Seven models, snake_case tables, all with id, created_at, updated_at.
+- `areas`: life areas (Career, Family, Influencing others, Hobbies, Friends, Health, Money, Learning seeded by migration). A goal has one area; an idea's area follows its goal, or is picked directly.
 - `sources`: title, type (book|article|podcast|person|other), url, author, raw_text
-- `goals`: name, description, status (active|done|paused)
-- `ideas`: text, context, counterpoint, use_note, source_id, goal_id, status (active|archived), review_interval_index, next_review_at, applied_count
-- `tags` + `idea_tags`: many to many. Goals and tags carry image_url or image_data (served at `/images/[kind]/[id]`); `src/lib/cover.ts` makes the default cover.
+- `goals`: name, description, status (active|done|paused), area_id
+- `ideas`: text, context, counterpoint, use_note, source_id, goal_id, area_id, status (active|archived), review_interval_index, next_review_at, applied_count
+- `tags` + `idea_tags`: many to many. Areas, goals and tags carry image_url or image_data (served at `/images/[kind]/[id]`); `src/lib/cover.ts` makes the default cover.
 - `applications`: idea_id, note, applied_at (one row per "used it")
 
 ## Review rule
@@ -21,7 +22,7 @@ Next.js 16 App Router (Cache Components on), TypeScript, Tailwind v4, Prisma 7 +
 
 ## Conventions
 - DB reads in server components: `await connection()` first, inside `<Suspense>`, or Next bakes the query in at build time.
-- Mobile first. Bottom nav: Today, Add, Library, Goals, Brief. Opens on Today. Topics (tags) live at `/topics`.
+- Mobile first. Bottom nav: Today, Add, Library, Goals, Brief. Opens on Today. Topics at `/topics`, areas at `/areas`. Library groups area → goal.
 - Mutations: server actions in `src/lib/*actions.ts`, FormData in, redirect out.
 - Commands: `npm run dev`, `npm run setup` (migrate + seed), `npm run typecheck`, `npm run lint`, `npm run build`.
 

@@ -23,6 +23,7 @@ async function IdeaDetail({ params }: { params: PageProps<"/ideas/[id]">["params
     include: {
       source: true,
       goal: true,
+      area: true,
       tags: { include: { tag: true } },
       applications: { orderBy: { appliedAt: "desc" } },
     },
@@ -51,6 +52,18 @@ async function IdeaDetail({ params }: { params: PageProps<"/ideas/[id]">["params
               </dd>
             </div>
           ) : null}
+          <div>
+            <dt className="inline">Area: </dt>
+            <dd className="inline text-foreground">
+              {idea.area ? (
+                <Link href={`/areas/${idea.area.id}`} className="hover:underline">
+                  {idea.area.name}
+                </Link>
+              ) : (
+                "None"
+              )}
+            </dd>
+          </div>
           <div>
             <dt className="inline">Goal: </dt>
             <dd className="inline text-foreground">{idea.goal?.name ?? "None"}</dd>

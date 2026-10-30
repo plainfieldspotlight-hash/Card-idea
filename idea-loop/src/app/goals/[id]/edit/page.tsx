@@ -27,10 +27,10 @@ async function EditGoal({
 }) {
   await connection();
   const [{ id }, query] = await Promise.all([params, searchParams]);
-  const goal = await prisma.goal.findUnique({
-    where: { id },
-    include: { _count: { select: { ideas: true } } },
-  });
+  const [goal, areas] = await Promise.all([
+    prisma.goal.findUnique({ where: { id }, include: { _count: { select: { ideas: true } } } }),
+    prisma.area.findMany({ orderBy: [{ sortOrder: "asc" }, { name: "asc" }], select: { id: true, name: true } }),
+  ]);
   if (!goal) notFound();
   const error = typeof query.error === "string" ? query.error : null;
 
@@ -46,6 +46,16 @@ async function EditGoal({
         <input type="hidden" name="id" value={goal.id} />
         <Field label="Name" htmlFor="name">
           <Input id="name" name="name" required defaultValue={goal.name} />
+        </Field>
+        <Field label="Area" hint="its ideas follow" htmlFor="areaId">
+          <Select id="areaId" name="areaId" defaultValue={goal.areaId ?? ""}>
+            <option value="">No area</option>
+            {areas.map((a) => (
+              <option key={a.id} value={a.id}>
+                {a.name}
+              </option>
+            ))}
+          </Select>
         </Field>
         <Field label="Description" hint="optional" htmlFor="description">
           <Input id="description" name="description" defaultValue={goal.description ?? ""} />

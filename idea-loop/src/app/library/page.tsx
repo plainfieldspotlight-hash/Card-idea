@@ -10,6 +10,7 @@ import { Cover } from "@/components/cover";
 import { imageSrc } from "@/lib/cover";
 
 type Filters = {
+  area: string;
   tag: string;
   source: string;
   applied: "" | "yes" | "no";
@@ -20,6 +21,7 @@ function readFilters(params: Record<string, string | string[] | undefined>): Fil
   const one = (k: string) => (typeof params[k] === "string" ? (params[k] as string) : "");
   const applied = one("applied");
   return {
+    area: one("area"),
     tag: one("tag"),
     source: one("source"),
     applied: applied === "yes" || applied === "no" ? applied : "",
@@ -30,7 +32,7 @@ function readFilters(params: Record<string, string | string[] | undefined>): Fil
 export default function LibraryPage(props: PageProps<"/library">) {
   return (
     <>
-      <PageHeader title="Library" subtitle="All ideas, grouped by goal." />
+      <PageHeader title="Library" subtitle="All ideas, grouped by area and goal." />
       <Suspense fallback={<ListSkeleton />}>
         <Library searchParams={props.searchParams} />
       </Suspense>
@@ -43,7 +45,11 @@ async function Library({ searchParams }: { searchParams: PageProps<"/library">["
   const filters = readFilters(await searchParams);
   const active = Object.values(filters).some(Boolean);
 
-  const [tags, sources, ideas] = await Promise.all([
+  const [areas, tags, sources, ideas] = await Promise.all([
+    prisma.area.findMany({
+      orderBy: [{ sortOrder: "asc" }, { name: "asc" }],
+      select: { id: true, name: true, imageUrl: true, imageData: true, updatedAt: true },
+    }),
     prisma.tag.findMany({
       orderBy: { name: "asc" },
       select: { id: true, name: true, imageUrl: true, imageData: true, updatedAt: true, _count: { select: { ideas: true } } },
@@ -52,6 +58,7 @@ async function Library({ searchParams }: { searchParams: PageProps<"/library">["
     prisma.idea.findMany({
       where: {
         status: filters.archived ? undefined : "active",
+        ...(filters.area ? { areaId: filters.area } : {}),
         ...(filters.tag ? { tags: { some: { tag: { name: filters.tag } } } } : {}),
         ...(filters.source ? { sourceId: filters.source } : {}),
         ...(filters.applied === "yes" ? { appliedCount: { gt: 0 } } : {}),
@@ -66,17 +73,30 @@ async function Library({ searchParams }: { searchParams: PageProps<"/library">["
     }),
   ]);
 
-  // Group by goal, keeping goal order stable and "No goal" last.
-  const groups = new Map<string, { name: string; goal: (typeof ideas)[number]["goal"]; ideas: typeof ideas }>();
+  // Group by area, then by goal inside each area. "No area" and "No goal" go last.
+  type Idea = (typeof ideas)[number];
+  type GoalGroup = { key: string; name: string; goal: Idea["goal"]; ideas: Idea[] };
+  type AreaGroup = { key: string; name: string; area: (typeof areas)[number] | null; goals: Map<string, GoalGroup> };
+  const areaGroups = new Map<string, AreaGroup>();
   for (const idea of ideas) {
-    const key = idea.goal?.id ?? "__none";
-    const name = idea.goal?.name ?? "No goal";
-    if (!groups.has(key)) groups.set(key, { name, goal: idea.goal, ideas: [] });
-    groups.get(key)!.ideas.push(idea);
+    const areaKey = idea.areaId ?? "__none";
+    if (!areaGroups.has(areaKey)) {
+      const area = areas.find((a) => a.id === idea.areaId) ?? null;
+      areaGroups.set(areaKey, { key: areaKey, name: area?.name ?? "No area", area, goals: new Map() });
+    }
+    const ag = areaGroups.get(areaKey)!;
+    const goalKey = idea.goal?.id ?? "__none";
+    if (!ag.goals.has(goalKey)) ag.goals.set(goalKey, { key: goalKey, name: idea.goal?.name ?? "No goal", goal: idea.goal, ideas: [] });
+    ag.goals.get(goalKey)!.ideas.push(idea);
   }
-  const ordered = Array.from(groups.entries()).sort(([a], [b]) =>
-    a === "__none" ? 1 : b === "__none" ? -1 : 0,
-  );
+  const areaOrder = [...areas.map((a) => a.id), "__none"];
+  const ordered = Array.from(areaGroups.values())
+    .sort((a, b) => areaOrder.indexOf(a.key) - areaOrder.indexOf(b.key))
+    .map((ag) => ({
+      ...ag,
+      goals: Array.from(ag.goals.values()).sort((a, b) => (a.key === "__none" ? 1 : b.key === "__none" ? -1 : 0)),
+      count: Array.from(ag.goals.values()).reduce((n, g) => n + g.ideas.length, 0),
+    }));
 
   return (
     <>
@@ -110,6 +130,14 @@ async function Library({ searchParams }: { searchParams: PageProps<"/library">["
       ) : null}
 
       <form method="get" className="mb-6 grid grid-cols-2 gap-2">
+        <Select name="area" defaultValue={filters.area} aria-label="Area" className="col-span-2">
+          <option value="">Every area</option>
+          {areas.map((a) => (
+            <option key={a.id} value={a.id}>
+              {a.name}
+            </option>
+          ))}
+        </Select>
         <Select name="tag" defaultValue={filters.tag} aria-label="Tag">
           <option value="">Any tag</option>
           {tags.map((t) => (
@@ -154,29 +182,47 @@ async function Library({ searchParams }: { searchParams: PageProps<"/library">["
           .
         </p>
       ) : (
-        <div className="space-y-6">
-          {ordered.map(([key, group]) => (
-            <section key={key}>
-              <h2 className="mb-2 flex items-center justify-between gap-3 text-sm font-semibold uppercase tracking-wide text-muted">
-                <span className="flex items-center gap-2">
-                  {group.goal ? (
-                    <Cover name={group.goal.name} src={imageSrc("goal", group.goal)} size="sm" className="h-7 w-7 rounded-lg" />
-                  ) : null}
-                  {group.goal ? (
-                    <Link href={`/goals/${group.goal.id}/edit`} className="hover:text-foreground">
-                      {group.name}
+        <div className="space-y-8">
+          {ordered.map((ag) => (
+            <section key={ag.key}>
+              <div className="mb-3 flex items-center gap-3">
+                {ag.area ? (
+                  <Cover name={ag.area.name} src={imageSrc("area", ag.area)} size="sm" className="h-9 w-9 rounded-xl" />
+                ) : null}
+                <div className="flex flex-1 items-baseline justify-between">
+                  {ag.area ? (
+                    <Link href={`/areas/${ag.area.id}`} className="text-base font-semibold hover:underline">
+                      {ag.name}
                     </Link>
                   ) : (
-                    <span>{group.name}</span>
+                    <span className="text-base font-semibold">{ag.name}</span>
                   )}
-                </span>
-                <span className="text-xs font-normal normal-case tabular-nums">{group.ideas.length}</span>
-              </h2>
-              <ul className="space-y-2">
-                {group.ideas.map((idea) => (
-                  <IdeaCard key={idea.id} idea={idea} />
+                  <span className="text-xs text-muted tabular-nums">{ag.count}</span>
+                </div>
+              </div>
+              <div className="space-y-4 border-l-2 border-border pl-3">
+                {ag.goals.map((group) => (
+                  <div key={group.key}>
+                    <h3 className="mb-2 flex items-center gap-2 text-xs font-semibold uppercase tracking-wide text-muted">
+                      {group.goal ? (
+                        <Cover name={group.goal.name} src={imageSrc("goal", group.goal)} size="sm" className="h-5 w-5 rounded-md" />
+                      ) : null}
+                      {group.goal ? (
+                        <Link href={`/goals/${group.goal.id}/edit`} className="hover:text-foreground">
+                          {group.name}
+                        </Link>
+                      ) : (
+                        <span>{group.name}</span>
+                      )}
+                    </h3>
+                    <ul className="space-y-2">
+                      {group.ideas.map((idea) => (
+                        <IdeaCard key={idea.id} idea={idea} />
+                      ))}
+                    </ul>
+                  </div>
                 ))}
-              </ul>
+              </div>
             </section>
           ))}
         </div>

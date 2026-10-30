@@ -56,6 +56,7 @@ async function EditIdea({
           tags: idea.tags.map((t) => t.tag.name).join(", "),
           useNote: idea.useNote ?? "",
           goalId: idea.goalId,
+          areaId: idea.areaId,
           context: idea.context,
           counterpoint: idea.counterpoint,
         }}

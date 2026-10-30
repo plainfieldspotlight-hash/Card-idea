@@ -15,16 +15,39 @@ async function main() {
   await prisma.goal.deleteMany();
   await prisma.source.deleteMany();
 
+  // Life areas. The migration inserts eight defaults with fixed ids; keep them
+  // and make sure they exist on databases created another way.
+  const defaultAreas = [
+    ["area_career", "Career", "Work, craft, and the next role."],
+    ["area_family", "Family", "Partner, kids, parents, home."],
+    ["area_influence", "Influencing others", "Persuading, leading, communicating."],
+    ["area_hobbies", "Hobbies", "Side projects and things done for their own sake."],
+    ["area_friends", "Friends", "Keeping and deepening friendships."],
+    ["area_health", "Health", "Body, sleep, energy."],
+    ["area_money", "Money", "Earning, saving, investing."],
+    ["area_learning", "Learning", "Reading, courses, skills."],
+  ] as const;
+  for (const [i, [id, name, description]] of defaultAreas.entries()) {
+    // Keyed by id so a renamed default area is left alone instead of colliding.
+    await prisma.area.upsert({
+      where: { id },
+      update: {},
+      create: { id, name, description, sortOrder: i + 1 },
+    });
+  }
+
   const treasury = await prisma.goal.create({
     data: {
       name: "Lead a treasury team well",
       description: "Be the manager people want to work for, and keep cash boring.",
+      areaId: "area_career",
     },
   });
   const postcards = await prisma.goal.create({
     data: {
       name: "Launch the postcard business",
       description: "First 100 paying customers for the Plainfield postcard line.",
+      areaId: "area_hobbies",
     },
   });
 
@@ -121,6 +144,7 @@ async function main() {
         counterpoint: idea.counterpoint,
         useNote: idea.useNote,
         goalId: idea.goalId,
+        areaId: idea.goalId === treasury.id ? "area_career" : "area_hobbies",
         sourceId: idea.sourceId,
         nextReviewAt: idea.nextReviewAt,
         tags: {
@@ -131,6 +155,7 @@ async function main() {
   }
 
   const counts = {
+    areas: await prisma.area.count(),
     goals: await prisma.goal.count(),
     sources: await prisma.source.count(),
     ideas: await prisma.idea.count(),

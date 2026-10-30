@@ -26,19 +26,41 @@ model Source {
   @@map("sources")
 }
 
+// Life areas, the "routes" ideas travel on: career, family, friends, hobbies...
+// Eight defaults are inserted by the areas migration; the user can add more.
+model Area {
+  id          String   @id @default(cuid())
+  name        String   @unique
+  description String?
+  sortOrder   Int      @default(0) @map("sort_order")
+  imageUrl    String?  @map("image_url")
+  imageData   Bytes?   @map("image_data") // served from /images/area/[id]
+  imageMime   String?  @map("image_mime")
+  createdAt   DateTime @default(now()) @map("created_at")
+  updatedAt   DateTime @updatedAt @map("updated_at")
+
+  goals Goal[]
+  ideas Idea[]
+
+  @@map("areas")
+}
+
 model Goal {
   id          String   @id @default(cuid())
   name        String
   description String?
   status      String   @default("active") // active | done | paused
+  areaId      String?  @map("area_id")
   imageUrl    String?  @map("image_url") // external image, or null
   imageData   Bytes?   @map("image_data") // uploaded image, served from /images/goal/[id]
   imageMime   String?  @map("image_mime")
   createdAt   DateTime @default(now()) @map("created_at")
   updatedAt   DateTime @updatedAt @map("updated_at")
 
+  area  Area?  @relation(fields: [areaId], references: [id], onDelete: SetNull)
   ideas Idea[]
 
+  @@index([areaId])
   @@map("goals")
 }
 
@@ -50,6 +72,7 @@ model Idea {
   useNote             String?   @map("use_note") // "where I could use this"
   sourceId            String?   @map("source_id")
   goalId              String?   @map("goal_id")
+  areaId              String?   @map("area_id") // follows the goal's area when a goal is set
   status              String    @default("active") // active | archived
   reviewIntervalIndex Int       @default(0) @map("review_interval_index") // index into [1,3,7,14,30,90] days
   nextReviewAt        DateTime? @map("next_review_at")
@@ -59,11 +82,13 @@ model Idea {
 
   source       Source?       @relation(fields: [sourceId], references: [id], onDelete: SetNull)
   goal         Goal?         @relation(fields: [goalId], references: [id], onDelete: SetNull)
+  area         Area?         @relation(fields: [areaId], references: [id], onDelete: SetNull)
   tags         IdeaTag[]
   applications Application[]
 
   @@index([nextReviewAt])
   @@index([goalId])
+  @@index([areaId])
   @@map("ideas")
 }
 

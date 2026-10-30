@@ -15,6 +15,9 @@ export type CoverIcon =
   | "calendar"
   | "bolt"
   | "leaf"
+  | "briefcase"
+  | "megaphone"
+  | "palette"
   | "letter";
 
 const PALETTES: [string, string][] = [
@@ -31,7 +34,10 @@ const PALETTES: [string, string][] = [
 ];
 
 const ICON_KEYWORDS: [CoverIcon, RegExp][] = [
-  ["people", /\b(manag|lead|team|people|hire|1:1|one.on.one|coach|mentor|culture)/i],
+  ["megaphone", /\b(influenc|persua|negotiat|communicat|speak|pitch|storytell)/i],
+  ["briefcase", /\b(career|work|job|role|promotion|profession|office)/i],
+  ["palette", /\b(hobb|craft|music|art\b|paint|photo|draw|cook|bake|game|guitar|piano)/i],
+  ["people", /\b(manag|lead|team|people|hire|1:1|one.on.one|coach|mentor|culture|friend|social|network)/i],
   ["coin", /\b(money|price|pricing|cash|treasury|finance|budget|revenue|cost|invest|sales?)\b/i],
   ["target", /\b(focus|goal|priorit|strateg|plan)/i],
   ["chat", /\b(customer|discover|interview|talk|conversation|feedback|user|listen)/i],
@@ -63,8 +69,10 @@ export function coverFor(name: string): { from: string; to: string; icon: CoverI
 
 type Imaged = { id: string; imageUrl: string | null; imageData: Uint8Array | null; updatedAt: Date };
 
-/** The image to show for a goal or tag: the user's own if set, otherwise null (use the default cover). */
-export function imageSrc(kind: "goal" | "tag", row: Imaged): string | null {
+export type ImageKind = "goal" | "tag" | "area";
+
+/** The image to show for a goal, tag or area: the user's own if set, otherwise null (use the default cover). */
+export function imageSrc(kind: ImageKind, row: Imaged): string | null {
   if (row.imageUrl) return row.imageUrl;
   if (row.imageData) return `/images/${kind}/${row.id}?v=${row.updatedAt.getTime()}`;
   return null;
