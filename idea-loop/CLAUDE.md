@@ -23,8 +23,9 @@ Next.js 16 App Router (Cache Components on), TypeScript, Tailwind v4, Prisma 7 +
 ## Conventions
 - DB reads in server components: `await connection()` first, inside `<Suspense>`, or Next bakes the query in at build time.
 - Mobile first. Bottom nav: Today, Add, Library, Goals, Brief. Opens on Today. Topics at `/topics`, areas at `/areas`. Library groups area → goal.
-- Mutations: server actions in `src/lib/*actions.ts`, FormData in, redirect out.
+- Mutations: server actions in `src/lib/*actions.ts`, FormData in, redirect out. Review actions in `review-actions.ts`.
+- PWA: `src/app/manifest.ts`, `public/sw.js` (registered in production only), icons in `public/icons`. Dev tools (make an idea due now) show when NODE_ENV != production or IDEA_LOOP_DEV_TOOLS=1.
 - Commands: `npm run dev`, `npm run setup` (migrate + seed), `npm run typecheck`, `npm run lint`, `npm run build`.
 
 ## Build order
-1. Skeleton (done) 2. Capture + Library (done) 3. Review loop 4. AI import 5. Briefs + weekly summary 6. Deploy. Finish each phase before the next; live with Phase 3 for two weeks first.
+1. Skeleton (done) 2. Capture + Library (done) 3. Review loop (done) 4. AI import 5. Briefs + weekly summary 6. Deploy. Finish each phase before the next; live with Phase 3 for two weeks first.

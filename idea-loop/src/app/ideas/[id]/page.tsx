@@ -4,6 +4,7 @@ import { notFound } from "next/navigation";
 import Link from "next/link";
 import { prisma } from "@/lib/db";
 import { archiveIdea, deleteIdea, restoreIdea } from "@/lib/actions";
+import { devToolsEnabled, makeDueNow } from "@/lib/review-actions";
 import { REVIEW_INTERVALS_DAYS } from "@/lib/review";
 import { Button, Card, Chip, LinkButton, formatDate } from "@/components/ui";
 
@@ -29,6 +30,7 @@ async function IdeaDetail({ params }: { params: PageProps<"/ideas/[id]">["params
     },
   });
   if (!idea) notFound();
+  const devTools = await devToolsEnabled();
 
   const archived = idea.status === "archived";
   const intervalDays = REVIEW_INTERVALS_DAYS[Math.min(idea.reviewIntervalIndex, REVIEW_INTERVALS_DAYS.length - 1)];
@@ -156,6 +158,18 @@ async function IdeaDetail({ params }: { params: PageProps<"/ideas/[id]">["params
         </form>
       </div>
       <p className="text-xs text-muted">Created {formatDate(idea.createdAt)}</p>
+
+      {devTools ? (
+        <form action={makeDueNow} className="rounded-2xl border border-dashed border-border p-4">
+          <input type="hidden" name="id" value={idea.id} />
+          <p className="mb-2 text-xs text-muted">
+            Dev only: set next review to now so this idea shows up on Today without waiting.
+          </p>
+          <Button type="submit" variant="secondary">
+            Make due now
+          </Button>
+        </form>
+      ) : null}
     </article>
   );
 }
